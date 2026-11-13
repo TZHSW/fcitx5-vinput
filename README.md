@@ -189,6 +189,11 @@ try `QT_QPA_PLATFORM=xcb vinput-gui --capsule` (requires XWayland). This lets th
 window manager apply the non-focusable window hints while keeping the existing
 Wayland desktop and voice-input service.
 
+On KDE Plasma 6, a temporary KWin script places the capsule on the keyboard-focused
+window's output; moving the pointer to another output does not move it. The script
+is removed when the preview exits. Without KWin scripting, placement falls back to
+the primary screen.
+
 ## Key bindings
 
 | Key | Default | Function |

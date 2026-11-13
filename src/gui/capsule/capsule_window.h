@@ -1,6 +1,8 @@
 #pragma once
 
 #include <QtCore/qglobal.h>
+#include <QtCore/qrect.h>
+#include <QtCore/qsize.h>
 #include <QtCore/qstring.h>
 #include <QtCore/qtimer.h>
 #include <QtCore/qtmetamacros.h>
@@ -14,8 +16,12 @@ class QLabel;
 class QPushButton;
 class QPaintEvent;
 class QResizeEvent;
+class QScreen;
 
 namespace vinput::gui {
+
+class FocusedScreen;
+QRect CapsuleBounds(const QRect& available, const QSize& desired);
 
 // An observer only: recording and committing remain owned by daemon/addon.
 class CapsuleWindow final : public QWidget {
@@ -42,6 +48,8 @@ private:
   void present(const QString& title, const QString& hint);
   void refreshText();
   void copyText() const;
+  void positionPreview();
+  void watchScreen(QScreen* screen);
 
   QLabel* title_;
   QLabel* indicator_;
@@ -49,6 +57,7 @@ private:
   QLabel* hint_;
   QPushButton* copy_;
   QPushButton* quit_;
+  FocusedScreen* focusedScreen_ = nullptr;
   QTimer hideTimer_;
   QString text_;
   std::optional<vinput::dbus::Status> phase_;

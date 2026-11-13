@@ -1,12 +1,17 @@
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qeventloop.h>
+#include <QtCore/qfile.h>
 #include <QtCore/qnamespace.h>
 #include <QtCore/qobject.h>
+#include <QtCore/qrect.h>
+#include <QtCore/qsize.h>
 #include <QtCore/qstring.h>
 #include <QtCore/qtimer.h>
 #include <QtCore/qtmetamacros.h>
 #include <QtCore/qtranslator.h>
+#include <QtCore/qvariant.h>
 #include <QtDBus/qdbusconnection.h>
+#include <QtDBus/qdbusmessage.h>
 #include <QtGui/qclipboard.h>
 #include <QtGui/qpixmap.h>
 #include <QtWidgets/qapplication.h>
@@ -19,6 +24,7 @@
 #include "common/dbus/dbus_interface.h"
 
 #include "capsule/capsule_window.h"
+#include "capsule/focused_screen.h"
 
 class TestDaemon final : public QObject {
   Q_OBJECT
@@ -36,6 +42,40 @@ Q_SIGNALS:
   void StatusChanged(const QString&);
   void RecognitionPartial(const QString&);
   void RecognitionResult(const QString&);
+};
+
+class TestKWin final : public QObject {
+  Q_OBJECT
+  Q_CLASSINFO("D-Bus Interface", "org.kde.kwin.Scripting")
+public:
+  bool loaded = true;
+  int loads = 0;
+  Q_SLOT bool unloadScript(const QString&) {
+    QTimer::singleShot(30, this, [this] { loaded = false; });
+    return true;
+  }
+  Q_SLOT bool isScriptLoaded(const QString&) const { return loaded; }
+  Q_SLOT int loadScript(const QString& path, const QString&) {
+    if (loaded || !QFile::exists(path)) {
+      return -1;
+    }
+    loaded = true;
+    ++loads;
+    return 7;
+  }
+};
+
+class TestKWinScript final : public QObject {
+  Q_OBJECT
+  Q_CLASSINFO("D-Bus Interface", "org.kde.kwin.Script")
+public:
+  Q_SLOT void run() {
+    auto message = QDBusMessage::createMethodCall(vinput::dbus::kCapsuleBusName,
+                                                  "/org/fcitx/Vinput/Capsule/Focus",
+                                                  "org.fcitx.Vinput.Capsule.Focus", "setOutput");
+    message.setArguments({QString("focused-output")});
+    QDBusConnection::sessionBus().send(message);
+  }
 };
 
 namespace {
@@ -128,6 +168,53 @@ void TestStateAndFocus() {
          "Legacy error notification preserves text across idle");
 }
 
+void TestScreenGeometry() {
+  const QSize capsule(448, 92);
+  const QRect right(1920, 0, 1920, 1040);
+  const QRect left(-1280, -200, 1280, 720);
+  const QRect portrait(0, -1080, 720, 1080);
+  for (const auto& area : {right, left, portrait}) {
+    const auto bounds = vinput::gui::CapsuleBounds(area, capsule);
+    Expect(area.contains(bounds), "Capsule stays on the selected screen's available area");
+    Expect(bounds.center().x() == area.center().x(),
+           "Capsule centered on that screen, not desktop");
+    Expect(area.bottom() - bounds.bottom() == 36,
+           "Bottom margin uses the selected logical geometry");
+  }
+  const QRect tiny(-200, 10, 200, 60);
+  Expect(tiny.contains(vinput::gui::CapsuleBounds(tiny, capsule)),
+         "Small output clamps both dimensions");
+}
+
+void TestFocusedScreenBus() {
+  auto client = QDBusConnection::sessionBus();
+  auto server = QDBusConnection::connectToBus(QDBusConnection::SessionBus, "focus-test-server");
+  TestKWin kwin;
+  TestKWinScript script;
+  Expect(client.registerService(vinput::dbus::kCapsuleBusName), "Own private capsule service");
+  Expect(server.registerService("org.kde.KWin"), "Own private KWin fixture service");
+  Expect(server.registerObject("/Scripting", &kwin, QDBusConnection::ExportAllSlots),
+         "Export scripting API");
+  Expect(server.registerObject("/Scripting/Script7", &script, QDBusConnection::ExportAllSlots),
+         "Export script run API");
+  {
+    vinput::gui::FocusedScreen focused(client);
+    Pump(400);
+    Expect(kwin.loads == 1 && focused.output() == "focused-output",
+           "Wait for stale script unload, load/run owned script, receive output over D-Bus");
+    Expect(server.unregisterService("org.kde.KWin"), "Simulate compositor service restart");
+    Pump();
+    Expect(server.registerService("org.kde.KWin"), "Restore compositor service");
+    Pump(400);
+    Expect(kwin.loads == 2, "Reinstall focus tracking after compositor restart");
+  }
+  Pump();
+  Expect(!kwin.loaded, "Tracker teardown unloads only its owned script");
+  Expect(client.unregisterService(vinput::dbus::kCapsuleBusName),
+         "Release capsule fixture service");
+  Expect(server.unregisterService("org.kde.KWin"), "Release KWin fixture service");
+}
+
 void TestPrivateBus() {
   using namespace vinput::dbus;
   auto server = QDBusConnection::connectToBus(QDBusConnection::SessionBus, "capsule-test-server");
@@ -203,8 +290,10 @@ int main(int argc, char* argv[]) {
     return 0;
   }
   if (QCoreApplication::arguments().contains("--bus")) {
+    TestFocusedScreenBus();
     TestPrivateBus();
   } else {
+    TestScreenGeometry();
     TestStateAndFocus();
   }
   std::cout << "Capsule tests passed.\n";

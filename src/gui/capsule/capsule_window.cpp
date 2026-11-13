@@ -2,6 +2,7 @@
 
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qglobal.h>
+#include <QtCore/qlist.h>
 #include <QtCore/qnamespace.h>
 #include <QtCore/qobjectdefs.h>
 #include <QtCore/qprocess.h>
@@ -39,7 +40,16 @@
 #include "common/asr/recognition_result.h"
 #include "common/dbus/dbus_interface.h"
 
+#include "focused_screen.h"
+
 namespace vinput::gui {
+
+QRect CapsuleBounds(const QRect& available, const QSize& desired) {
+  const int width = std::min(desired.width(), available.width());
+  const int height = std::min(desired.height(), available.height());
+  return {available.x() + ((available.width() - width) / 2),
+          std::max(available.top(), available.bottom() + 1 - height - 36), width, height};
+}
 
 CapsuleWindow::CapsuleWindow(QWidget* parent)
     : QWidget(parent), title_(new QLabel(this)),
@@ -98,6 +108,26 @@ CapsuleWindow::CapsuleWindow(QWidget* parent)
     }
   });
   createTray();
+  for (auto* screen : QGuiApplication::screens()) {
+    watchScreen(screen);
+  }
+  connect(qApp, &QGuiApplication::screenAdded, this, &CapsuleWindow::watchScreen);
+  connect(qApp, &QGuiApplication::screenRemoved, this, [this] {
+    if (isVisible()) {
+      positionPreview();
+    }
+  });
+}
+
+void CapsuleWindow::watchScreen(QScreen* screen) {
+  const auto reposition = [this] {
+    if (isVisible()) {
+      positionPreview();
+    }
+  };
+  connect(screen, &QScreen::geometryChanged, this, reposition);
+  connect(screen, &QScreen::availableGeometryChanged, this, reposition);
+  reposition();
 }
 
 void CapsuleWindow::createTray() {
@@ -123,6 +153,12 @@ void CapsuleWindow::createTray() {
 
 void CapsuleWindow::observe(QDBusConnection bus) {
   using namespace vinput::dbus;
+  focusedScreen_ = new FocusedScreen(bus, this);
+  connect(focusedScreen_, &FocusedScreen::outputChanged, this, [this] {
+    if (isVisible()) {
+      positionPreview();
+    }
+  });
   const bool status = bus.connect(kBusName, kObjectPath, kInterface, kSignalStatusChanged, this,
                                   SLOT(onStatus(QString)));
   const bool partial = bus.connect(kBusName, kObjectPath, kInterface, kSignalRecognitionPartial,
@@ -294,21 +330,30 @@ void CapsuleWindow::present(const QString& title, const QString& hint) {
                     phase_ == vinput::dbus::Status::Error ||
                     (phase_ == vinput::dbus::Status::Idle && !text_.isEmpty()));
   quit_->setVisible(!QSystemTrayIcon::isSystemTrayAvailable());
-  const auto* screen = QGuiApplication::primaryScreen();
-  if (screen != nullptr) {
-    const QRect area = screen->availableGeometry();
-    resize(std::min(448, area.width()), height());
+  positionPreview();
+  refreshText();
+  show(); // No activateWindow/raise: keep the target application's input focus.
+}
+
+void CapsuleWindow::positionPreview() {
+  auto* screen = QGuiApplication::primaryScreen();
+  if (focusedScreen_ != nullptr) {
+    for (auto* candidate : QGuiApplication::screens()) {
+      if (candidate->name() == focusedScreen_->output()) {
+        screen = candidate;
+        break;
+      }
+    }
   }
+  if (screen == nullptr) {
+    return;
+  }
+  const QRect area = screen->availableGeometry();
+  resize(std::min(448, area.width()), height());
   layout()->activate();
   const int contentHeight = layout()->hasHeightForWidth() ? layout()->totalHeightForWidth(width())
                                                           : layout()->sizeHint().height();
-  resize(width(), std::max(92, contentHeight));
-  if (screen != nullptr) {
-    const QRect area = screen->availableGeometry();
-    move(area.center().x() - (width() / 2), area.bottom() - height() - 36);
-  }
-  refreshText();
-  show(); // No activateWindow/raise: keep the target application's input focus.
+  setGeometry(CapsuleBounds(area, QSize(width(), std::max(92, contentHeight))));
 }
 
 void CapsuleWindow::refreshText() {

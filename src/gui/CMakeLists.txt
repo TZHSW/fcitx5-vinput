@@ -16,6 +16,7 @@ set(VINPUT_GUI_SOURCES
     app/main.cpp
     app/mainwindow.cpp
     capsule/capsule_window.cpp
+    capsule/focused_screen.cpp
     utils/gui_helpers.cpp
     utils/config_manager.cpp
     utils/download_worker.cpp
@@ -31,6 +32,7 @@ set(VINPUT_GUI_SOURCES
 set(VINPUT_GUI_HEADERS
     app/mainwindow.h
     capsule/capsule_window.h
+    capsule/focused_screen.h
     utils/gui_helpers.h
     utils/config_manager.h
     utils/download_worker.h

@@ -34,7 +34,8 @@ endif ()
 find_package(Qt6 COMPONENTS Widgets DBus REQUIRED)
 vinput_add_test(
   test_capsule_window SOURCES test_capsule_window.cpp
-  ${CMAKE_SOURCE_DIR}/src/gui/capsule/capsule_window.cpp LIBS Qt6::Widgets Qt6::DBus
+  ${CMAKE_SOURCE_DIR}/src/gui/capsule/capsule_window.cpp
+  ${CMAKE_SOURCE_DIR}/src/gui/capsule/focused_screen.cpp LIBS Qt6::Widgets Qt6::DBus
   ENV "QT_QPA_PLATFORM=offscreen"
 )
 target_include_directories(test_capsule_window PRIVATE ${CMAKE_SOURCE_DIR}/src/gui)

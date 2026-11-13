@@ -9,6 +9,7 @@
 #include <fcitx-config/rawconfig.h>
 #include <fcitx-utils/dbus/bus.h>
 #include <fcitx-utils/dbus/message.h>
+#include <fcitx-utils/dbus/servicewatcher.h>
 #include <fcitx-utils/event.h>
 #include <fcitx-utils/eventdispatcher.h>
 #include <fcitx-utils/handlertable.h>
@@ -169,6 +170,11 @@ private:
   fcitx::EventDispatcher event_dispatcher_;
   std::vector<std::unique_ptr<fcitx::HandlerTableEntry<fcitx::EventHandler>>> eventHandlers_;
   fcitx::dbus::Bus* bus_ = nullptr;
+  std::unique_ptr<fcitx::dbus::ServiceWatcher> capsule_watcher_;
+  std::unique_ptr<fcitx::dbus::ServiceWatcherEntry> capsule_watch_entry_;
+  bool capsule_available_ = false;
+  std::string voice_preedit_text_;
+  std::string voice_aux_text_;
   std::unique_ptr<fcitx::dbus::Slot> result_slot_;
   std::unique_ptr<fcitx::dbus::Slot> partial_slot_;
   std::unique_ptr<fcitx::dbus::Slot> status_slot_;

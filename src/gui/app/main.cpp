@@ -15,6 +15,8 @@
 #include <QtWidgets/qapplication.h>
 #include <QtWidgets/qmessagebox.h>
 
+#include "common/dbus/dbus_interface.h"
+
 #include "capsule/capsule_window.h"
 #include "mainwindow.h"
 
@@ -102,7 +104,7 @@ int main(int argc, char* argv[]) {
 
   if (QCoreApplication::arguments().contains(QStringLiteral("--capsule"))) {
     auto bus = QDBusConnection::sessionBus();
-    if (!bus.registerService(QStringLiteral("org.fcitx.Vinput.Capsule"))) {
+    if (!bus.registerService(QString::fromLatin1(vinput::dbus::kCapsuleBusName))) {
       QMessageBox::information(
           nullptr, vinput::gui::CapsuleWindow::tr("Vinput Live Preview"),
           vinput::gui::CapsuleWindow::tr(

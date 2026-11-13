@@ -68,17 +68,19 @@ jobs:
             -DVINPUT_ENABLE_WERROR=ON \
             -DVINPUT_ENABLE_LOCAL_ASR=OFF \
             -DVINPUT_PACKAGE_HOMEPAGE_URL="${{ github.server_url }}/${{ github.repository }}"
-          cmake --build --preset ci-clang-mold --parallel 2 --target gui qt-translations test_capsule_window
+          cmake --build --preset ci-clang-mold --parallel 2 --target gui addon qt-translations test_capsule_window modifier_key_tests
 
       - name: Test preview state and private D-Bus integration
         run: |
           command -v dbus-run-session
-          ctest --test-dir build -R '^test_capsule_(window|bus)$' --output-on-failure --timeout 60
+          ctest --test-dir build -R '^(test_capsule_(window|bus)|modifier_key_tests)$' --output-on-failure --timeout 60
 
-      - name: Package GUI-only trial
+      - name: Package preview and addon trial
         run: |
           tar -C build/src/gui -czf vinput-capsule-linux-x86_64.tar.gz vinput-gui vinput-gui_zh_CN.qm
+          tar -C build/src/addon -czf vinput-capsule-addon-linux-x86_64.tar.gz fcitx5-vinput.so vinput-addon.conf
           sha256sum vinput-capsule-linux-x86_64.tar.gz > vinput-capsule-linux-x86_64.tar.gz.sha256
+          sha256sum vinput-capsule-addon-linux-x86_64.tar.gz > vinput-capsule-addon-linux-x86_64.tar.gz.sha256
 
       - uses: actions/upload-artifact@v4
         with:
@@ -86,6 +88,8 @@ jobs:
           path: |
             vinput-capsule-linux-x86_64.tar.gz
             vinput-capsule-linux-x86_64.tar.gz.sha256
+            vinput-capsule-addon-linux-x86_64.tar.gz
+            vinput-capsule-addon-linux-x86_64.tar.gz.sha256
           if-no-files-found: error
           retention-days: 14
 

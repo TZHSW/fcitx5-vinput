@@ -1578,6 +1578,14 @@ Found %2 model(s).</source>
 <context>
     <name>vinput::gui::CapsuleWindow</name>
     <message>
+        <source>Session ended</source>
+        <translation>本次录音已结束</translation>
+    </message>
+    <message>
+        <source>No final result. You can copy the preview text.</source>
+        <translation>未收到最终结果，可以复制预览文字。</translation>
+    </message>
+    <message>
         <source>Ready</source>
         <translation>准备就绪</translation>
     </message>

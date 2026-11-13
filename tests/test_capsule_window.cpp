@@ -17,8 +17,16 @@
 class TestDaemon final : public QObject {
   Q_OBJECT
   Q_CLASSINFO("D-Bus Interface", "org.fcitx.Vinput.Service")
+public:
+  QString status = "idle";
+  QString startupPartial;
 public Q_SLOTS:
-  QString GetStatus() { return "idle"; }
+  QString GetStatus() {
+    if (!startupPartial.isEmpty()) {
+      Q_EMIT RecognitionPartial(startupPartial);
+    }
+    return status;
+  }
 Q_SIGNALS:
   void StatusChanged(const QString& status);
   void RecognitionPartial(const QString& text);
@@ -88,8 +96,15 @@ void TestStateAndFocus() {
   window.onStatus("recording");
   window.onPartial("放弃本次录音");
   window.onStatus("idle");
-  Expect(!window.findChild<QPushButton*>("capsuleCopy")->isEnabled(),
-         "Cancellation via idle without a result discards the partial");
+  Expect(CopyText(window) == "放弃本次录音" && status->text() == "Session ended",
+         "Idle without a result may be cancellation or failure; keep an uncommitted preview");
+  window.onStatus("recording");
+  window.onPartial("网络中断前的文字");
+  window.onStatus("inferring");
+  window.onStatus("idle");
+  window.onPartial("迟到的预览");
+  Expect(CopyText(window) == "网络中断前的文字" && status->text() == "Session ended",
+         "Finalization failure with only idle retains text and ignores late partials");
   window.onStatus("recording");
   window.onPartial("等待整理");
   window.onStatus("postprocessing");
@@ -109,6 +124,17 @@ void TestPrivateBus() {
   Expect(server.registerObject(kObjectPath, &daemon,
                                QDBusConnection::ExportAllSlots | QDBusConnection::ExportAllSignals),
          "Fixture must export existing daemon signatures");
+  {
+    daemon.status = "recording";
+    daemon.startupPartial = "启动中 English";
+    vinput::gui::CapsuleWindow startingWindow;
+    startingWindow.observe(QDBusConnection::sessionBus());
+    Pump();
+    Expect(startingWindow.isVisible() && CopyText(startingWindow) == "启动中 English",
+           "Real partial sent before startup reply must be retained and displayed");
+  }
+  daemon.status = "idle";
+  daemon.startupPartial.clear();
   vinput::gui::CapsuleWindow window;
   window.observe(QDBusConnection::sessionBus());
   // Simulate a new live event before the asynchronous idle snapshot is delivered.

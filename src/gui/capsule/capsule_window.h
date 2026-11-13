@@ -4,6 +4,7 @@
 #include <QString>
 #include <QTimer>
 #include <QWidget>
+#include <optional>
 
 #include "common/dbus/dbus_interface.h"
 
@@ -47,7 +48,7 @@ private:
   QPushButton* copy_;
   QTimer hideTimer_;
   QString text_;
-  vinput::dbus::Status phase_ = vinput::dbus::Status::Idle;
+  std::optional<vinput::dbus::Status> phase_;
   quint64 revision_ = 0;
   bool resultReceived_ = false;
 };

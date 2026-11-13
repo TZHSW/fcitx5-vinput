@@ -177,7 +177,10 @@ path. It requires a running daemon; it does not start recording by itself.
 
 The tray menu provides settings, copy, and exit actions. Idle hides the capsule
 when a system tray is available; without a tray, it stays visible with an exit
-button. Errors retain the current preview for copying. Wayland compositors may
+button. Errors retain the current preview for copying. If the daemon ends a session
+without a final result, the capsule keeps the preview under **Session ended**:
+the existing signal cannot distinguish cancellation from every failure.
+Wayland compositors may
 choose the window position. This feature displays provider updates as they arrive
 and does not reduce the provider's recognition latency.
 

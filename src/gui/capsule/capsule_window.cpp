@@ -151,17 +151,17 @@ void CapsuleWindow::queryStatus(const QDBusConnection& bus) {
 
 void CapsuleWindow::onStatus(const QString& status) {
   using namespace vinput::dbus;
-  ++revision_;
   const std::string value = status.toStdString();
   constexpr std::array known{kStatusIdle, kStatusRecording, kStatusInferring, kStatusPostprocessing,
                              kStatusError};
   if (std::ranges::find(known, value) == known.end()) {
     return;
   }
+  ++revision_;
   const Status next = StringToStatus(value);
   switch (next) {
   case Status::Recording:
-    if (phase_ != Status::Recording) {
+    if (phase_.has_value() && phase_ != Status::Recording) {
       text_.clear();
       resultReceived_ = false;
     }
@@ -188,8 +188,12 @@ void CapsuleWindow::onStatus(const QString& status) {
       hideTimer_.start();
       return;
     }
-    text_.clear();
-    refreshText();
+    if (!text_.isEmpty()) {
+      // Current daemons use idle for both cancellation and some failures.
+      // Preserve the hypothesis without claiming a result or a specific cause.
+      present(tr("Session ended"), tr("No final result. You can copy the preview text."));
+      return;
+    }
     if (!QSystemTrayIcon::isSystemTrayAvailable()) {
       present(tr("Ready"), tr("Use your voice-input shortcut to start recording."));
       return;
@@ -200,23 +204,26 @@ void CapsuleWindow::onStatus(const QString& status) {
 }
 
 void CapsuleWindow::onPartial(const QString& text) {
-  ++revision_;
   if (text.isEmpty() || phase_ == vinput::dbus::Status::Idle ||
       phase_ == vinput::dbus::Status::Error) {
     return;
   }
+  // Buffer startup partials until GetStatus establishes the phase. A partial
+  // does not establish a new phase and must not invalidate that snapshot.
   // Partial is a cumulative hypothesis, not a delta.
   text_ = text;
   refreshText();
 }
 
 void CapsuleWindow::onResult(const QString& payload) {
-  ++revision_;
   const auto result = vinput::result::Parse(payload.toStdString());
   const bool cancelled = std::ranges::any_of(result.candidates, [](const auto& candidate) {
     return candidate.source == vinput::result::kSourceCancel;
   });
   if (cancelled) {
+    ++revision_;
+    hideTimer_.stop();
+    phase_ = vinput::dbus::Status::Idle;
     resultReceived_ = false;
     text_.clear();
     refreshText();
@@ -226,6 +233,7 @@ void CapsuleWindow::onResult(const QString& payload) {
   if (result.commitText.empty()) {
     return;
   }
+  ++revision_;
   resultReceived_ = true;
   text_ = QString::fromStdString(result.commitText);
   present(tr("Recognition result"),

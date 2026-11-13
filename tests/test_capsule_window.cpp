@@ -67,6 +67,9 @@ void TestStateAndFocus() {
   window.onStatus("recording");
   window.onPartial("中文 English");
   window.onPartial("中文和 English。");
+  Expect(QSystemTrayIcon::isSystemTrayAvailable() ||
+             window.findChild<QPushButton*>("capsuleCopy")->isVisible(),
+         "Live text must remain copyable without a tray");
   Expect(CopyText(window) == "中文和 English。", "Cumulative partial replaces previous text");
   window.onStatus("recording");
   Expect(CopyText(window) == "中文和 English。", "Duplicate recording status must not clear text");

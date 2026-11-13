@@ -101,9 +101,8 @@ CapsuleWindow::CapsuleWindow(QWidget* parent)
 }
 
 void CapsuleWindow::createTray() {
-  if (!QSystemTrayIcon::isSystemTrayAvailable()) {
-    return;
-  }
+  // Keep the icon registered even without a tray; Qt adds it automatically
+  // if the desktop's system tray becomes available later.
   const QIcon icon = QIcon::fromTheme("audio-input-microphone",
                                       QApplication::style()->standardIcon(QStyle::SP_MediaVolume));
   auto* tray = new QSystemTrayIcon(icon, this);
@@ -291,7 +290,8 @@ void CapsuleWindow::present(const QString& title, const QString& hint) {
   title_->setToolTip(hint);
   hint_->setVisible(phase_ == vinput::dbus::Status::Error ||
                     (phase_ == vinput::dbus::Status::Idle && !text_.isEmpty() && !resultReceived_));
-  copy_->setVisible(resultReceived_ || phase_ == vinput::dbus::Status::Error ||
+  copy_->setVisible(!QSystemTrayIcon::isSystemTrayAvailable() || resultReceived_ ||
+                    phase_ == vinput::dbus::Status::Error ||
                     (phase_ == vinput::dbus::Status::Idle && !text_.isEmpty()));
   quit_->setVisible(!QSystemTrayIcon::isSystemTrayAvailable());
   const auto* screen = QGuiApplication::primaryScreen();

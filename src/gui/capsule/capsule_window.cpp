@@ -227,7 +227,7 @@ void CapsuleWindow::onResult(const QString& payload) {
     resultReceived_ = false;
     text_.clear();
     refreshText();
-    hide();
+    onStatus(vinput::dbus::kStatusIdle);
     return;
   }
   if (result.commitText.empty()) {

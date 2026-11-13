@@ -6,6 +6,7 @@
 #include <QObject>
 #include <QPushButton>
 #include <QString>
+#include <QSystemTrayIcon>
 #include <QTimer>
 #include <cstdlib>
 #include <iostream>
@@ -87,12 +88,16 @@ void TestStateAndFocus() {
   window.onResult("{malformed");
   Expect(CopyText(window) == "保留", "Malformed result must not destroy the preview");
   window.onResult(R"({"candidates":[{"text":"取消","source":"cancel"}]})");
-  Expect(!window.isVisible(), "Cancelled input must not be presented as a result");
+  Expect(window.isVisible() != QSystemTrayIcon::isSystemTrayAvailable(),
+         "Cancellation hides only when the tray provides an exit control");
   Expect(!window.findChild<QPushButton*>("capsuleCopy")->isEnabled(), "Cancel discards text");
   window.onStatus("idle");
   window.onPartial("迟到的预览");
   Expect(!window.findChild<QPushButton*>("capsuleCopy")->isEnabled(),
          "Idle ignores delayed partials even when no tray is available");
+  window.onResult(R"({"candidates":[{"text":"取消","source":"cancel"}]})");
+  Expect(window.isVisible() != QSystemTrayIcon::isSystemTrayAvailable(),
+         "Idle before cancellation must preserve the no-tray exit control");
   window.onStatus("recording");
   window.onPartial("放弃本次录音");
   window.onStatus("idle");

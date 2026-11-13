@@ -1,13 +1,16 @@
-#include <QApplication>
-#include <QClipboard>
-#include <QDBusConnection>
-#include <QEventLoop>
-#include <QLabel>
-#include <QObject>
-#include <QPushButton>
-#include <QString>
-#include <QSystemTrayIcon>
-#include <QTimer>
+#include <QtCore/qcoreapplication.h>
+#include <QtCore/qeventloop.h>
+#include <QtCore/qnamespace.h>
+#include <QtCore/qobject.h>
+#include <QtCore/qstring.h>
+#include <QtCore/qtimer.h>
+#include <QtCore/qtmetamacros.h>
+#include <QtDBus/qdbusconnection.h>
+#include <QtGui/qclipboard.h>
+#include <QtWidgets/qapplication.h>
+#include <QtWidgets/qlabel.h>
+#include <QtWidgets/qpushbutton.h>
+#include <QtWidgets/qsystemtrayicon.h>
 #include <cstdlib>
 #include <iostream>
 
@@ -21,8 +24,7 @@ class TestDaemon final : public QObject {
 public:
   QString status = "idle";
   QString startupPartial;
-public Q_SLOTS:
-  QString GetStatus() {
+  Q_SLOT QString GetStatus() {
     if (!startupPartial.isEmpty()) {
       Q_EMIT RecognitionPartial(startupPartial);
     }

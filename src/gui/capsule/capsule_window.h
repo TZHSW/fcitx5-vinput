@@ -1,9 +1,11 @@
 #pragma once
 
-#include <QDBusConnection>
-#include <QString>
-#include <QTimer>
-#include <QWidget>
+#include <QtCore/qglobal.h>
+#include <QtCore/qstring.h>
+#include <QtCore/qtimer.h>
+#include <QtCore/qtmetamacros.h>
+#include <QtDBus/qdbusconnection.h>
+#include <QtWidgets/qwidget.h>
 #include <optional>
 
 #include "common/dbus/dbus_interface.h"
@@ -23,12 +25,11 @@ public:
   explicit CapsuleWindow(QWidget* parent = nullptr);
   void observe(QDBusConnection bus);
 
-public Q_SLOTS:
-  void onStatus(const QString& status);
-  void onPartial(const QString& text);
-  void onResult(const QString& payload);
-  void onNotification(const QString& code, const QString& subject, const QString& detail,
-                      const QString& raw);
+  Q_SLOT void onStatus(const QString& status);
+  Q_SLOT void onPartial(const QString& text);
+  Q_SLOT void onResult(const QString& payload);
+  Q_SLOT void onNotification(const QString& code, const QString& subject, const QString& detail,
+                             const QString& raw);
 
 protected:
   void paintEvent(QPaintEvent* event) override;

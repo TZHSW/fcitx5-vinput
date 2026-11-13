@@ -1,31 +1,40 @@
 #include "capsule_window.h"
 
-#include <QApplication>
-#include <QClipboard>
-#include <QCoreApplication>
-#include <QDBusMessage>
-#include <QDBusPendingCallWatcher>
-#include <QDBusPendingReply>
-#include <QDBusServiceWatcher>
-#include <QFontMetrics>
-#include <QGuiApplication>
-#include <QHBoxLayout>
-#include <QIcon>
-#include <QLabel>
-#include <QMenu>
-#include <QPainter>
-#include <QProcess>
-#include <QPushButton>
-#include <QResizeEvent>
-#include <QScreen>
-#include <QStyle>
-#include <QSystemTrayIcon>
-#include <QVBoxLayout>
+#include <QtCore/qcoreapplication.h>
+#include <QtCore/qglobal.h>
+#include <QtCore/qnamespace.h>
+#include <QtCore/qobjectdefs.h>
+#include <QtCore/qprocess.h>
+#include <QtCore/qrect.h>
+#include <QtCore/qstringlist.h>
+#include <QtDBus/qdbusconnection.h>
+#include <QtDBus/qdbusmessage.h>
+#include <QtDBus/qdbuspendingcall.h>
+#include <QtDBus/qdbuspendingreply.h>
+#include <QtDBus/qdbusservicewatcher.h>
+#include <QtGui/qclipboard.h>
+#include <QtGui/qcolor.h>
+#include <QtGui/qevent.h>
+#include <QtGui/qfontmetrics.h>
+#include <QtGui/qguiapplication.h>
+#include <QtGui/qicon.h>
+#include <QtGui/qpainter.h>
+#include <QtGui/qscreen.h>
+#include <QtWidgets/qapplication.h>
+#include <QtWidgets/qboxlayout.h>
+#include <QtWidgets/qlabel.h>
+#include <QtWidgets/qmenu.h>
+#include <QtWidgets/qpushbutton.h>
+#include <QtWidgets/qsizepolicy.h>
+#include <QtWidgets/qstyle.h>
+#include <QtWidgets/qsystemtrayicon.h>
+#include <QtWidgets/qwidget.h>
 #include <algorithm>
 #include <array>
 #include <string>
 
 #include "common/asr/recognition_result.h"
+#include "common/dbus/dbus_interface.h"
 
 namespace vinput::gui {
 
@@ -271,7 +280,7 @@ void CapsuleWindow::present(const QString& title, const QString& hint) {
   if (screen != nullptr) {
     const QRect area = screen->availableGeometry();
     resize(std::min(560, area.width()), height());
-    move(area.center().x() - width() / 2, area.bottom() - height() - 60);
+    move(area.center().x() - (width() / 2), area.bottom() - height() - 60);
   }
   show(); // No activateWindow/raise: keep the target application's input focus.
 }

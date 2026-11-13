@@ -122,6 +122,9 @@ jobs:
             -DVINPUT_PACKAGE_HOMEPAGE_URL="${{ github.server_url }}/${{ github.repository }}" \
             -DVINPUT_RUNTIME_MODE=bundled
 
+      - name: Generate Qt meta-object sources for static analysis
+        run: cmake --build --preset release-clang-mold --parallel 2 --target gui_autogen test_capsule_window_autogen
+
       - name: Run cpp-linter (Clang-Tidy & Clang-Format)
         uses: cpp-linter/cpp-linter-action@v2
         id: linter

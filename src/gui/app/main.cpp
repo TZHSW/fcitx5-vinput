@@ -1,6 +1,3 @@
-#include <QDBusConnection>
-#include <QMessageBox>
-#include <QStringList>
 #include <QtCore/qbytearray.h>
 #include <QtCore/qcontainerfwd.h>
 #include <QtCore/qcoreapplication.h>
@@ -14,7 +11,9 @@
 #include <QtCore/qstringlist.h>
 #include <QtCore/qstringliteral.h>
 #include <QtCore/qtranslator.h>
+#include <QtDBus/qdbusconnection.h>
 #include <QtWidgets/qapplication.h>
+#include <QtWidgets/qmessagebox.h>
 
 #include "capsule/capsule_window.h"
 #include "mainwindow.h"

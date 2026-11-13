@@ -2,7 +2,6 @@
 
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qglobal.h>
-#include <QtCore/qlist.h>
 #include <QtCore/qnamespace.h>
 #include <QtCore/qobjectdefs.h>
 #include <QtCore/qprocess.h>

@@ -1,15 +1,16 @@
 #include "focused_screen.h"
 
 #include <QtCore/qbytearray.h>
+#include <QtCore/qcontainerfwd.h>
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qdir.h>
+#include <QtCore/qglobal.h>
 #include <QtCore/qiodevice.h>
 #include <QtCore/qlist.h>
 #include <QtCore/qobject.h>
 #include <QtCore/qtemporaryfile.h>
 #include <QtCore/qtimer.h>
 #include <QtCore/qtmetamacros.h>
-#include <QtCore/qvariant.h>
 #include <QtDBus/qdbusconnection.h>
 #include <QtDBus/qdbusmessage.h>
 #include <QtDBus/qdbuspendingcall.h>
@@ -97,18 +98,14 @@ void FocusedScreen::setOutput(const QString& name) {
   Q_EMIT outputChanged(output_);
 }
 
-void FocusedScreen::invoke(const QString& method, const QVariantList& arguments,
-                           std::function<void(const QDBusMessage&)> callback) {
+QDBusPendingCallWatcher* FocusedScreen::invoke(const QString& method,
+                                               const QVariantList& arguments) {
   auto message = QDBusMessage::createMethodCall(kKWin, "/Scripting", kScripting, method);
   message.setAutoStartService(false);
   message.setArguments(arguments);
   auto* pending = new QDBusPendingCallWatcher(bus_.asyncCall(message, 1000), this);
-  connect(pending, &QDBusPendingCallWatcher::finished, this,
-          [callback = std::move(callback)](QDBusPendingCallWatcher* call) {
-            const auto reply = call->reply();
-            call->deleteLater();
-            callback(reply);
-          });
+  connect(pending, &QDBusPendingCallWatcher::finished, pending, &QObject::deleteLater);
+  return pending;
 }
 
 void FocusedScreen::restart() {
@@ -116,47 +113,52 @@ void FocusedScreen::restart() {
     return;
   }
   const auto generation = ++generation_;
-  invoke("unloadScript", {kScriptName}, [this, generation](const QDBusMessage& message) {
-    if (generation != generation_ || message.type() == QDBusMessage::ErrorMessage) {
-      return;
-    }
-    waitForUnload(generation, 20);
-  });
+  auto* pending = invoke("unloadScript", {kScriptName});
+  connect(pending, &QDBusPendingCallWatcher::finished, this,
+          [this, generation](QDBusPendingCallWatcher* call) {
+            if (generation != generation_ || call->reply().type() == QDBusMessage::ErrorMessage) {
+              return;
+            }
+            waitForUnload(generation, 20);
+          });
 }
 
 void FocusedScreen::waitForUnload(quint64 generation, int retries) {
-  invoke("isScriptLoaded", {kScriptName}, [this, generation, retries](const QDBusMessage& message) {
-    const QDBusReply<bool> reply(message);
-    if (generation != generation_ || !reply.isValid()) {
-      return;
-    }
-    if (!reply.value()) {
-      load(generation);
-      return;
-    }
-    if (retries > 0) {
-      QTimer::singleShot(25, this, [this, generation, retries] {
-        if (generation == generation_) {
-          waitForUnload(generation, retries - 1);
-        }
-      });
-    }
-  });
+  auto* pending = invoke("isScriptLoaded", {kScriptName});
+  connect(pending, &QDBusPendingCallWatcher::finished, this,
+          [this, generation, retries](QDBusPendingCallWatcher* call) {
+            const QDBusReply<bool> reply(call->reply());
+            if (generation != generation_ || !reply.isValid()) {
+              return;
+            }
+            if (!reply.value()) {
+              load(generation);
+              return;
+            }
+            if (retries > 0) {
+              QTimer::singleShot(25, this, [this, generation, retries] {
+                if (generation == generation_) {
+                  waitForUnload(generation, retries - 1);
+                }
+              });
+            }
+          });
 }
 
 void FocusedScreen::load(quint64 generation) {
-  invoke("loadScript", {script_.fileName(), kScriptName},
-         [this, generation](const QDBusMessage& message) {
-           const QDBusReply<int> reply(message);
-           if (generation != generation_ || !reply.isValid() || reply.value() < 0) {
-             return;
-           }
-           auto run = QDBusMessage::createMethodCall(
-               kKWin, "/Scripting/Script" + QString::number(reply.value()), "org.kde.kwin.Script",
-               "run");
-           run.setAutoStartService(false);
-           bus_.send(run);
-         });
+  auto* pending = invoke("loadScript", {script_.fileName(), kScriptName});
+  connect(pending, &QDBusPendingCallWatcher::finished, this,
+          [this, generation](QDBusPendingCallWatcher* call) {
+            const QDBusReply<int> reply(call->reply());
+            if (generation != generation_ || !reply.isValid() || reply.value() < 0) {
+              return;
+            }
+            auto run = QDBusMessage::createMethodCall(
+                kKWin, "/Scripting/Script" + QString::number(reply.value()), "org.kde.kwin.Script",
+                "run");
+            run.setAutoStartService(false);
+            bus_.send(run);
+          });
 }
 
 } // namespace vinput::gui

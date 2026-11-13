@@ -6,10 +6,8 @@
 #include <QtCore/qstring.h>
 #include <QtCore/qtemporaryfile.h>
 #include <QtCore/qtmetamacros.h>
-#include <QtCore/qvariant.h>
 #include <QtDBus/qdbusconnection.h>
-#include <QtDBus/qdbusmessage.h>
-#include <functional>
+#include <QtDBus/qdbuspendingcall.h>
 
 namespace vinput::gui {
 
@@ -22,6 +20,10 @@ class FocusedScreen final : public QObject {
 public:
   explicit FocusedScreen(QDBusConnection bus, QObject* parent = nullptr);
   ~FocusedScreen() override;
+  FocusedScreen(const FocusedScreen&) = delete;
+  FocusedScreen& operator=(const FocusedScreen&) = delete;
+  FocusedScreen(FocusedScreen&&) = delete;
+  FocusedScreen& operator=(FocusedScreen&&) = delete;
   [[nodiscard]] QString output() const { return output_; }
   Q_SLOT Q_SCRIPTABLE void setOutput(const QString& name);
 
@@ -33,8 +35,7 @@ private:
   void waitForUnload(quint64 generation, int retries);
   void load(quint64 generation);
   void stop();
-  void invoke(const QString& method, const QVariantList& arguments,
-              std::function<void(const QDBusMessage&)> callback);
+  QDBusPendingCallWatcher* invoke(const QString& method, const QVariantList& arguments);
 
   QDBusConnection bus_;
   QTemporaryFile script_;

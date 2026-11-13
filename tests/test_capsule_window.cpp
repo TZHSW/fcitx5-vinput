@@ -54,7 +54,7 @@ public:
     QTimer::singleShot(30, this, [this] { loaded = false; });
     return true;
   }
-  Q_SLOT bool isScriptLoaded(const QString&) const { return loaded; }
+  Q_SLOT [[nodiscard]] bool isScriptLoaded(const QString&) const { return loaded; }
   Q_SLOT int loadScript(const QString& path, const QString&) {
     if (loaded || !QFile::exists(path)) {
       return -1;
@@ -69,7 +69,9 @@ class TestKWinScript final : public QObject {
   Q_OBJECT
   Q_CLASSINFO("D-Bus Interface", "org.kde.kwin.Script")
 public:
+  int runs = 0;
   Q_SLOT void run() {
+    ++runs;
     auto message = QDBusMessage::createMethodCall(vinput::dbus::kCapsuleBusName,
                                                   "/org/fcitx/Vinput/Capsule/Focus",
                                                   "org.fcitx.Vinput.Capsule.Focus", "setOutput");
@@ -200,13 +202,16 @@ void TestFocusedScreenBus() {
   {
     vinput::gui::FocusedScreen focused(client);
     Pump(400);
-    Expect(kwin.loads == 1 && focused.output() == "focused-output",
+    Expect(kwin.loads == 1 && script.runs == 1 && focused.output() == "focused-output",
            "Wait for stale script unload, load/run owned script, receive output over D-Bus");
     Expect(server.unregisterService("org.kde.KWin"), "Simulate compositor service restart");
     Pump();
     Expect(server.registerService("org.kde.KWin"), "Restore compositor service");
     Pump(400);
-    Expect(kwin.loads == 2, "Reinstall focus tracking after compositor restart");
+    Expect(kwin.loads == 2 && script.runs == 2,
+           "Reinstall focus tracking after compositor restart");
+    focused.setOutput("");
+    Expect(focused.output() == "focused-output", "Transient empty focus retains last output");
   }
   Pump();
   Expect(!kwin.loaded, "Tracker teardown unloads only its owned script");

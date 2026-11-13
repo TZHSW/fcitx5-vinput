@@ -184,6 +184,11 @@ Wayland compositors may
 choose the window position. This feature displays provider updates as they arrive
 and does not reduce the provider's recognition latency.
 
+If the capsule flashes and recording is immediately cancelled on KDE Wayland,
+try `QT_QPA_PLATFORM=xcb vinput-gui --capsule` (requires XWayland). This lets the
+window manager apply the non-focusable window hints while keeping the existing
+Wayland desktop and voice-input service.
+
 ## Key bindings
 
 | Key | Default | Function |

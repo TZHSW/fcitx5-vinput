@@ -31,9 +31,9 @@ public:
     return status;
   }
 Q_SIGNALS:
-  void StatusChanged(const QString& status);
-  void RecognitionPartial(const QString& text);
-  void RecognitionResult(const QString& payload);
+  void StatusChanged(const QString&);
+  void RecognitionPartial(const QString&);
+  void RecognitionResult(const QString&);
 };
 
 namespace {

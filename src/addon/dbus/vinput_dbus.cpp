@@ -6,6 +6,7 @@
 #include <ctime>
 #include <fcitx-utils/dbus/matchrule.h>
 #include <fcitx-utils/dbus/message.h>
+#include <fcitx-utils/dbus/servicewatcher.h>
 #include <fcitx-utils/event.h>
 #include <fcitx-utils/i18n.h>
 #include <fcitx-utils/key.h>
@@ -301,6 +302,21 @@ void VinputEngine::setupDBusWatcher() {
   }
 
   const std::weak_ptr<bool> token = lifetime_token_;
+
+  capsule_watcher_ = std::make_unique<fcitx::dbus::ServiceWatcher>(*bus_);
+  capsule_watch_entry_ = capsule_watcher_->watchService(
+      kCapsuleBusName,
+      [this, token](const std::string&, const std::string&, const std::string& owner) {
+        if (token.expired()) {
+          return;
+        }
+        capsule_available_ = !owner.empty();
+        // Only repaint a live voice session: idle ownership changes must not
+        // dismiss the final candidate menu or another input method's panel.
+        if (session_ && status_ic_ != nullptr) {
+          updateVoicePresentation(status_ic_, voice_preedit_text_, voice_aux_text_);
+        }
+      });
 
   const fcitx::dbus::MatchRule result_rule(kBusName, kObjectPath, kInterface,
                                            kSignalRecognitionResult);
@@ -953,10 +969,15 @@ void VinputEngine::updateVoicePresentation(fcitx::InputContext* ic, const std::s
     return;
   }
   dismissMenusForVoiceActivity();
+  voice_preedit_text_ = preedit_text;
+  voice_aux_text_ = aux_down_text;
+  const bool external_preview = capsule_available_ && session_ && status_ic_ == ic;
   fcitx::Text preedit;
-  preedit.append(preedit_text);
   fcitx::Text aux_down;
-  aux_down.append(aux_down_text);
+  if (!external_preview) {
+    preedit.append(preedit_text);
+    aux_down.append(aux_down_text);
+  }
   ic->inputPanel().setPreedit(preedit);
   ic->inputPanel().setAuxDown(aux_down);
   ic->updatePreedit();

@@ -1574,4 +1574,96 @@ Found %2 model(s).</source>
         <translation>错误</translation>
     </message>
 </context>
+
+<context>
+    <name>vinput::gui::CapsuleWindow</name>
+    <message>
+        <source>Session ended</source>
+        <translation>本次录音已结束</translation>
+    </message>
+    <message>
+        <source>No final result. You can copy the preview text.</source>
+        <translation>未收到最终结果，可以复制预览文字。</translation>
+    </message>
+    <message>
+        <source>Ready</source>
+        <translation>准备就绪</translation>
+    </message>
+    <message>
+        <source>Copy text</source>
+        <translation>复制文字</translation>
+    </message>
+    <message>
+        <source>Vinput Live Preview</source>
+        <translation>Vinput 实时预览</translation>
+    </message>
+    <message>
+        <source>Exit preview</source>
+        <translation>退出预览</translation>
+    </message>
+    <message>
+        <source>Open settings</source>
+        <translation>打开设置</translation>
+    </message>
+    <message>
+        <source>Show preview</source>
+        <translation>显示预览</translation>
+    </message>
+    <message>
+        <source>Use your voice-input shortcut to start recording.</source>
+        <translation>使用语音输入快捷键开始录音。</translation>
+    </message>
+    <message>
+        <source>Cannot observe voice input</source>
+        <translation>无法连接语音预览</translation>
+    </message>
+    <message>
+        <source>Voice input disconnected</source>
+        <translation>语音输入服务已断开</translation>
+    </message>
+    <message>
+        <source>Listening</source>
+        <translation>正在录音</translation>
+    </message>
+    <message>
+        <source>Use your voice-input shortcut to finish.</source>
+        <translation>使用语音输入快捷键结束录音。</translation>
+    </message>
+    <message>
+        <source>Finalizing</source>
+        <translation>正在校正</translation>
+    </message>
+    <message>
+        <source>Waiting for the final result; preview text may change.</source>
+        <translation>正在等待最终结果，预览文字仍可能变化。</translation>
+    </message>
+    <message>
+        <source>Rewriting</source>
+        <translation>正在整理</translation>
+    </message>
+    <message>
+        <source>Recognition failed</source>
+        <translation>识别失败</translation>
+    </message>
+    <message>
+        <source>Recognition result</source>
+        <translation>识别结果</translation>
+    </message>
+    <message>
+        <source>Your input method handles insertion or candidate selection.</source>
+        <translation>由输入法完成上屏或候选选择。</translation>
+    </message>
+    <message>
+        <source>Preview text is kept for copying. See the system notification for details.</source>
+        <translation>已保留预览文字供复制，详情请查看系统通知。</translation>
+    </message>
+    <message>
+        <source>Speak to see a live preview.</source>
+        <translation>说话时，文字会显示在这里。</translation>
+    </message>
+    <message>
+        <source>Preview is already running, or the session bus is unavailable.</source>
+        <translation>预览已在运行，或会话总线不可用。</translation>
+    </message>
+</context>
 </TS>

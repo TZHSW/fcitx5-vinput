@@ -51,6 +51,54 @@ env:
   SCCACHE_CACHE_SIZE: 2G
 
 jobs:
+  capsule-preview:
+    name: capsule-preview-linux
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install build dependencies
+        run: |
+          ./scripts/ci-install-build-deps.sh ubuntu24.04
+          sudo apt-get install -y fonts-noto-cjk
+
+      - name: Build preview and native tests
+        run: |
+          cmake --preset ci-clang-mold \
+            -DVINPUT_ENABLE_WERROR=ON \
+            -DVINPUT_ENABLE_LOCAL_ASR=OFF \
+            -DVINPUT_PACKAGE_HOMEPAGE_URL="${{ github.server_url }}/${{ github.repository }}"
+          cmake --build --preset ci-clang-mold --parallel 2 --target gui addon qt-translations test_capsule_window modifier_key_tests
+
+      - name: Test preview state and private D-Bus integration
+        run: |
+          command -v dbus-run-session
+          ctest --test-dir build -R '^(test_capsule_(window|bus)|modifier_key_tests)$' --output-on-failure --timeout 60
+
+      - name: Package preview and addon trial
+        run: |
+          tar -C build/src/gui -czf vinput-capsule-linux-x86_64.tar.gz vinput-gui vinput-gui_zh_CN.qm
+          tar -C build/src/addon -czf vinput-capsule-addon-linux-x86_64.tar.gz fcitx5-vinput.so vinput-addon.conf
+          sha256sum vinput-capsule-linux-x86_64.tar.gz > vinput-capsule-linux-x86_64.tar.gz.sha256
+          sha256sum vinput-capsule-addon-linux-x86_64.tar.gz > vinput-capsule-addon-linux-x86_64.tar.gz.sha256
+
+      - name: Render native preview states
+        run: QT_QPA_PLATFORM=offscreen build/tests/test_capsule_window --render
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vinput-capsule-linux-x86_64
+          path: |
+            vinput-capsule-linux-x86_64.tar.gz
+            vinput-capsule-linux-x86_64.tar.gz.sha256
+            vinput-capsule-addon-linux-x86_64.tar.gz
+            vinput-capsule-addon-linux-x86_64.tar.gz.sha256
+            capsule-*.png
+          if-no-files-found: error
+          retention-days: 14
+
   cpp-linter:
     name: cpp-linter
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
@@ -83,6 +131,9 @@ jobs:
             -DVINPUT_ENABLE_WERROR=ON \
             -DVINPUT_PACKAGE_HOMEPAGE_URL="${{ github.server_url }}/${{ github.repository }}" \
             -DVINPUT_RUNTIME_MODE=bundled
+
+      - name: Generate Qt meta-object sources for static analysis
+        run: cmake --build --preset release-clang-mold --parallel 2 --target gui_autogen test_capsule_window_autogen
 
       - name: Run cpp-linter (Clang-Tidy & Clang-Format)
         uses: cpp-linter/cpp-linter-action@v2

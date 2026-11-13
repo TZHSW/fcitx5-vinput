@@ -1,4 +1,3 @@
-#include <QStringList>
 #include <QtCore/qbytearray.h>
 #include <QtCore/qcontainerfwd.h>
 #include <QtCore/qcoreapplication.h>
@@ -12,8 +11,13 @@
 #include <QtCore/qstringlist.h>
 #include <QtCore/qstringliteral.h>
 #include <QtCore/qtranslator.h>
+#include <QtDBus/qdbusconnection.h>
 #include <QtWidgets/qapplication.h>
+#include <QtWidgets/qmessagebox.h>
 
+#include "common/dbus/dbus_interface.h"
+
+#include "capsule/capsule_window.h"
 #include "mainwindow.h"
 
 namespace {
@@ -96,6 +100,21 @@ int main(int argc, char* argv[]) {
   if (qtTranslator.load(QLocale::system(), QStringLiteral("qtbase"), QStringLiteral("_"),
                         QLibraryInfo::path(QLibraryInfo::TranslationsPath))) {
     QCoreApplication::installTranslator(&qtTranslator);
+  }
+
+  if (QCoreApplication::arguments().contains(QStringLiteral("--capsule"))) {
+    auto bus = QDBusConnection::sessionBus();
+    if (!bus.registerService(QString::fromLatin1(vinput::dbus::kCapsuleBusName))) {
+      QMessageBox::information(
+          nullptr, vinput::gui::CapsuleWindow::tr("Vinput Live Preview"),
+          vinput::gui::CapsuleWindow::tr(
+              "Preview is already running, or the session bus is unavailable."));
+      return 1;
+    }
+    QApplication::setQuitOnLastWindowClosed(false);
+    vinput::gui::CapsuleWindow capsule;
+    capsule.observe(bus);
+    return QApplication::exec();
   }
 
   MainWindow window;

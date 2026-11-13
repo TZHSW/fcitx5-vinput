@@ -286,6 +286,8 @@ VinputEngine::VinputEngine(fcitx::Instance* instance) : instance_(instance) {
 
 VinputEngine::~VinputEngine() {
   lifetime_token_.reset();
+  capsule_watch_entry_.reset();
+  capsule_watcher_.reset();
 
   flushContextBuffer();
   context_writer_.reset(); // Persist all queued entries before addon teardown.

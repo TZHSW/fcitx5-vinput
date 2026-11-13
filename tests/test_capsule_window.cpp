@@ -5,8 +5,10 @@
 #include <QtCore/qstring.h>
 #include <QtCore/qtimer.h>
 #include <QtCore/qtmetamacros.h>
+#include <QtCore/qtranslator.h>
 #include <QtDBus/qdbusconnection.h>
 #include <QtGui/qclipboard.h>
+#include <QtGui/qpixmap.h>
 #include <QtWidgets/qapplication.h>
 #include <QtWidgets/qlabel.h>
 #include <QtWidgets/qpushbutton.h>
@@ -168,11 +170,35 @@ void TestPrivateBus() {
   Expect(CopyText(window) == "服务重连", "Subscriptions survive service restart");
 }
 
+void RenderPreviews() {
+  vinput::gui::CapsuleWindow window;
+  window.onStatus("recording");
+  window.onPartial("把想到的，自然地说出来。");
+  Pump();
+  Expect(window.grab().save("capsule-recording.png"), "Recording preview rendered");
+  window.onStatus("inferring");
+  window.onResult(R"({"commit_text":"中文与 English，都可以自然表达。"})");
+  Pump();
+  Expect(window.grab().save("capsule-result.png"), "Result preview rendered");
+  window.onStatus("recording");
+  window.onPartial("识别到的文字会为你保留。");
+  window.onStatus("error");
+  Pump();
+  Expect(window.grab().save("capsule-error.png"), "Error preview rendered");
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
   const QApplication app(argc, argv);
   QApplication::setQuitOnLastWindowClosed(false);
+  if (QCoreApplication::arguments().contains("--render")) {
+    QTranslator translator;
+    Expect(translator.load("build/src/gui/vinput-gui_zh_CN.qm"), "Chinese translation available");
+    QCoreApplication::installTranslator(&translator);
+    RenderPreviews();
+    return 0;
+  }
   if (QCoreApplication::arguments().contains("--bus")) {
     TestPrivateBus();
   } else {

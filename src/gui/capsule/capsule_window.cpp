@@ -12,6 +12,7 @@
 #include <QtDBus/qdbuspendingcall.h>
 #include <QtDBus/qdbuspendingreply.h>
 #include <QtDBus/qdbusservicewatcher.h>
+#include <QtGui/qbrush.h>
 #include <QtGui/qclipboard.h>
 #include <QtGui/qcolor.h>
 #include <QtGui/qevent.h>
@@ -19,10 +20,12 @@
 #include <QtGui/qguiapplication.h>
 #include <QtGui/qicon.h>
 #include <QtGui/qpainter.h>
+#include <QtGui/qpen.h>
 #include <QtGui/qscreen.h>
 #include <QtWidgets/qapplication.h>
 #include <QtWidgets/qboxlayout.h>
 #include <QtWidgets/qlabel.h>
+#include <QtWidgets/qlayout.h>
 #include <QtWidgets/qmenu.h>
 #include <QtWidgets/qpushbutton.h>
 #include <QtWidgets/qsizepolicy.h>
@@ -39,38 +42,51 @@
 namespace vinput::gui {
 
 CapsuleWindow::CapsuleWindow(QWidget* parent)
-    : QWidget(parent), title_(new QLabel(this)), preview_(new QLabel(this)),
-      hint_(new QLabel(this)), copy_(new QPushButton(tr("Copy text"), this)) {
+    : QWidget(parent), title_(new QLabel(this)),
+      indicator_(new QLabel(QString::fromUtf8("●"), this)), preview_(new QLabel(this)),
+      hint_(new QLabel(this)), copy_(new QPushButton(tr("Copy text"), this)),
+      quit_(new QPushButton(QString::fromUtf8("×"), this)) {
   setWindowTitle(tr("Vinput Live Preview"));
   setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint |
                  Qt::WindowDoesNotAcceptFocus);
   setAttribute(Qt::WA_ShowWithoutActivating);
   setAttribute(Qt::WA_TranslucentBackground);
   setFocusPolicy(Qt::NoFocus);
-  resize(560, 126);
+  resize(448, 92);
+  setStyleSheet("QPushButton {color:#bec4cf;background:transparent;border:0;"
+                "border-radius:6px;padding:3px 7px;font-size:11px;}"
+                "QPushButton:hover {color:#ffffff;background:#343943;}"
+                "QPushButton:pressed {background:#424956;}");
   title_->setObjectName("capsuleStatus");
+  title_->setStyleSheet("color:#aeb6c5;font-size:12px;font-weight:500;");
+  title_->setMinimumHeight(22);
+  indicator_->setFixedWidth(10);
   preview_->setObjectName("capsuleText");
   preview_->setTextFormat(Qt::PlainText);
   preview_->setMinimumWidth(0);
   preview_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-  preview_->setStyleSheet("color:#f1f3f7;font-size:17px;");
+  preview_->setMinimumHeight(26);
   hint_->setWordWrap(true);
-  hint_->setStyleSheet("color:#b3bbca;font-size:11px;");
+  hint_->setStyleSheet("color:#aeb6c5;font-size:12px;");
   copy_->setObjectName("capsuleCopy");
   copy_->setEnabled(false);
   copy_->setFocusPolicy(Qt::NoFocus);
   connect(copy_, &QPushButton::clicked, this, &CapsuleWindow::copyText);
-  auto* quit = new QPushButton(tr("Exit preview"), this);
-  quit->setFocusPolicy(Qt::NoFocus);
-  connect(quit, &QPushButton::clicked, qApp, &QApplication::quit);
+  quit_->setFixedSize(24, 22);
+  quit_->setToolTip(tr("Exit preview"));
+  quit_->setAccessibleName(tr("Exit preview"));
+  quit_->setFocusPolicy(Qt::NoFocus);
+  connect(quit_, &QPushButton::clicked, qApp, &QApplication::quit);
   auto* row = new QHBoxLayout;
+  row->setSpacing(7);
+  row->addWidget(indicator_);
   row->addWidget(title_);
   row->addStretch();
   row->addWidget(copy_);
-  row->addWidget(quit);
+  row->addWidget(quit_);
   auto* layout = new QVBoxLayout(this);
-  layout->setContentsMargins(22, 14, 22, 14);
-  layout->setSpacing(10);
+  layout->setContentsMargins(24, 16, 24, 18);
+  layout->setSpacing(8);
   layout->addLayout(row);
   layout->addWidget(preview_);
   layout->addWidget(hint_);
@@ -268,25 +284,37 @@ void CapsuleWindow::showFailure(const QString& title) {
 void CapsuleWindow::present(const QString& title, const QString& hint) {
   hideTimer_.stop();
   title_->setText(title);
-  title_->setStyleSheet(phase_ == vinput::dbus::Status::Error
-                            ? "color:#ffbd83;font-size:13px;font-weight:600;"
-                            : "color:#72e0b3;font-size:13px;font-weight:600;");
+  indicator_->setStyleSheet(phase_ == vinput::dbus::Status::Error
+                                ? "color:#efb87b;font-size:10px;"
+                                : "color:#78d4b3;font-size:10px;");
   hint_->setText(hint);
-  refreshText();
-  if (isVisible()) {
-    return;
-  }
+  title_->setToolTip(hint);
+  hint_->setVisible(phase_ == vinput::dbus::Status::Error ||
+                    (phase_ == vinput::dbus::Status::Idle && !text_.isEmpty() && !resultReceived_));
+  copy_->setVisible(resultReceived_ || phase_ == vinput::dbus::Status::Error ||
+                    (phase_ == vinput::dbus::Status::Idle && !text_.isEmpty()));
+  quit_->setVisible(!QSystemTrayIcon::isSystemTrayAvailable());
   const auto* screen = QGuiApplication::primaryScreen();
   if (screen != nullptr) {
     const QRect area = screen->availableGeometry();
-    resize(std::min(560, area.width()), height());
-    move(area.center().x() - (width() / 2), area.bottom() - height() - 60);
+    resize(std::min(448, area.width()), height());
   }
+  layout()->activate();
+  const int contentHeight = layout()->hasHeightForWidth() ? layout()->totalHeightForWidth(width())
+                                                          : layout()->sizeHint().height();
+  resize(width(), std::max(92, contentHeight));
+  if (screen != nullptr) {
+    const QRect area = screen->availableGeometry();
+    move(area.center().x() - (width() / 2), area.bottom() - height() - 36);
+  }
+  refreshText();
   show(); // No activateWindow/raise: keep the target application's input focus.
 }
 
 void CapsuleWindow::refreshText() {
   copy_->setEnabled(!text_.isEmpty());
+  preview_->setStyleSheet(text_.isEmpty() ? "color:#7e899b;font-size:17px;"
+                                          : "color:#f1f3f7;font-size:17px;");
   const QString display = text_.isEmpty() ? tr("Speak to see a live preview.") : text_;
   preview_->setText(preview_->fontMetrics().elidedText(display, Qt::ElideLeft, preview_->width()));
   preview_->setToolTip(text_);
@@ -301,9 +329,15 @@ void CapsuleWindow::copyText() const {
 void CapsuleWindow::paintEvent(QPaintEvent* /*event*/) {
   QPainter painter(this);
   painter.setRenderHint(QPainter::Antialiasing);
-  painter.setBrush(QColor("#202530"));
-  painter.setPen(QColor("#434d60"));
-  painter.drawRoundedRect(rect().adjusted(1, 1, -1, -1), 24, 24);
+  painter.setPen(Qt::NoPen);
+  painter.setBrush(QColor(0, 0, 0, 28));
+  painter.drawRoundedRect(rect().adjusted(3, 7, -3, -1), 23, 23);
+  QLinearGradient surface(0, 0, 0, height());
+  surface.setColorAt(0, QColor("#242932"));
+  surface.setColorAt(1, QColor("#1b1f27"));
+  painter.setBrush(surface);
+  painter.setPen(QPen(QColor(255, 255, 255, 28), 1));
+  painter.drawRoundedRect(rect().adjusted(6, 4, -6, -6), 19, 19);
 }
 
 void CapsuleWindow::resizeEvent(QResizeEvent* event) {

@@ -44,9 +44,11 @@ private:
   void copyText() const;
 
   QLabel* title_;
+  QLabel* indicator_;
   QLabel* preview_;
   QLabel* hint_;
   QPushButton* copy_;
+  QPushButton* quit_;
   QTimer hideTimer_;
   QString text_;
   std::optional<vinput::dbus::Status> phase_;

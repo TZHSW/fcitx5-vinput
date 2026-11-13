@@ -167,6 +167,20 @@ Open **Vinput GUI** → **Resources → Models** → download and activate a mod
 - **Tap** `Alt_R` — start/stop recording
 - **Hold** `Alt_R` — push-to-talk
 
+### Optional live preview (this fork)
+
+Run `vinput-gui --capsule`, or choose **Live voice preview** in the application's
+desktop launcher actions. Keep using your existing voice-input shortcut. The
+capsule displays cumulative partial text and the final recognition result without
+taking keyboard focus or changing your ASR provider, credentials, or insertion
+path. It requires a running daemon; it does not start recording by itself.
+
+The tray menu provides settings, copy, and exit actions. Idle hides the capsule
+when a system tray is available; without a tray, it stays visible with an exit
+button. Errors retain the current preview for copying. Wayland compositors may
+choose the window position. This feature displays provider updates as they arrive
+and does not reduce the provider's recognition latency.
+
 ## Key bindings
 
 | Key | Default | Function |

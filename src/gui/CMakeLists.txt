@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 
 find_package(
   Qt6
-  COMPONENTS Core Gui Widgets Network
+  COMPONENTS Core Gui Widgets Network DBus
   REQUIRED
 )
 find_package(Qt6LinguistTools QUIET)
@@ -15,6 +15,7 @@ set(CMAKE_AUTOUIC ON)
 set(VINPUT_GUI_SOURCES
     app/main.cpp
     app/mainwindow.cpp
+    capsule/capsule_window.cpp
     utils/gui_helpers.cpp
     utils/config_manager.cpp
     utils/download_worker.cpp
@@ -29,6 +30,7 @@ set(VINPUT_GUI_SOURCES
 
 set(VINPUT_GUI_HEADERS
     app/mainwindow.h
+    capsule/capsule_window.h
     utils/gui_helpers.h
     utils/config_manager.h
     utils/download_worker.h
@@ -85,6 +87,7 @@ target_link_libraries(
           Qt6::Gui
           Qt6::Widgets
           Qt6::Network
+          Qt6::DBus
           common
           pipewire_device
           client_runtime

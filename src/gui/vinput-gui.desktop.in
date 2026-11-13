@@ -6,3 +6,9 @@ Exec=vinput-gui
 Icon=vinput-gui
 Categories=Utility;
 Terminal=false
+Actions=LivePreview;
+
+[Desktop Action LivePreview]
+Name=Live voice preview
+Name[zh_CN]=语音实时预览
+Exec=vinput-gui --capsule

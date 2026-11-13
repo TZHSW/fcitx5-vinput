@@ -31,6 +31,23 @@ if (VINPUT_ENABLE_LOCAL_ASR)
   vinput_add_test(test_hotword_utils LIBS daemon_core)
 endif ()
 
+find_package(Qt6 COMPONENTS Widgets DBus REQUIRED)
+vinput_add_test(
+  test_capsule_window SOURCES test_capsule_window.cpp
+  ${CMAKE_SOURCE_DIR}/src/gui/capsule/capsule_window.cpp LIBS Qt6::Widgets Qt6::DBus
+  ENV "QT_QPA_PLATFORM=offscreen"
+)
+target_include_directories(test_capsule_window PRIVATE ${CMAKE_SOURCE_DIR}/src/gui)
+set_target_properties(test_capsule_window PROPERTIES AUTOMOC ON)
+find_program(DBUS_RUN_SESSION_EXECUTABLE dbus-run-session)
+if (DBUS_RUN_SESSION_EXECUTABLE)
+  add_test(
+    NAME test_capsule_bus
+    COMMAND ${DBUS_RUN_SESSION_EXECUTABLE} -- $<TARGET_FILE:test_capsule_window> --bus
+  )
+  set_tests_properties(test_capsule_bus PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+endif ()
+
 # 1. Common & Config core tests
 vinput_add_test(test_installed_manifest)
 vinput_add_test(test_process_utils)

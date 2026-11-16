@@ -9,6 +9,7 @@
 #endif
 #include <fcitx-utils/i18n.h>
 #include <fcitx-utils/key.h>
+#include <fcitx-utils/keysym.h>
 #include <fcitx-utils/keysymgen.h>
 #include <fcitx-utils/log.h>
 #include <fcitx-utils/utf8.h>
@@ -238,7 +239,7 @@ bool VinputEngine::handleVoiceControlKeyEvent(fcitx::KeyEvent& keyEvent) {
 
 bool VinputEngine::handlePostprocessingKeyEvent(fcitx::KeyEvent& keyEvent) {
   const bool discard = keyEvent.key().check(FcitxKey_Escape);
-  if (session_->phase != Session::Phase::Postprocessing ||
+  if (!session_ || session_->phase != Session::Phase::Postprocessing ||
       last_known_daemon_status_ != vinput::dbus::kStatusPostprocessing) {
     return false;
   }
@@ -394,7 +395,7 @@ void VinputEngine::startHeldDictation() {
     return;
   }
   startVoiceRecording(ic, pending_start_trigger_, false);
-  if (isRecordingActive()) {
+  if (session_ && session_->phase == Session::Phase::PendingStart) {
     session_->stop_on_release = true;
   }
 }
@@ -424,7 +425,7 @@ void VinputEngine::releaseDictationGesture(fcitx::InputContext* ic, const fcitx:
   held_role_ = HotkeyRole::None;
   if (held) {
     cancelPendingStart();
-    if (isHoldRecording() && session_->trigger == key) {
+    if (session_ && session_->stop_on_release && session_->trigger == key) {
       session_->stop_on_release = false;
       session_->trigger_released = true;
       handleActiveSessionHotkeyDown(key);

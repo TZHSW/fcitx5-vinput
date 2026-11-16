@@ -474,6 +474,7 @@ void runAllTests() {
   VinputEngine engine(&instance);
 
   fcitx::RawConfig test_config;
+  test_config.setValueByPath("TriggerMode", "Both");
   test_config.setValueByPath("TriggerKey/0", "Alt_R");
   test_config.setValueByPath("TriggerKey/1", "F8");
   test_config.setValueByPath("CommandKeys/0", "Control_R");

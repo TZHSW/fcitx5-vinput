@@ -477,13 +477,13 @@ void VinputEngine::callCancelOperation(bool commit_raw_text) {
 }
 
 void VinputEngine::discardRecording() {
-  if (session_->capture_action == Session::CaptureAction::Discard) {
+  if (!session_ || session_->capture_action == Session::CaptureAction::Discard) {
     return;
   }
-  cancelPendingStart();
-  cancelPendingStop();
   session_->capture_action = Session::CaptureAction::Discard;
   session_->stop_on_release = false;
+  cancelPendingStart();
+  cancelPendingStop();
   callCancelOperation(false);
 }
 
@@ -563,7 +563,7 @@ void VinputEngine::enterRecordingState(fcitx::InputContext* ic, const fcitx::Key
     clearVoicePresentation(status_ic_);
   }
   const bool stop_after_start =
-      (trigger_mode_ == TriggerMode::Hold || (session_ && session_->stop_on_release)) && session_ &&
+      session_ && (trigger_mode_ == TriggerMode::Hold || session_->stop_on_release) &&
       session_->phase == Session::Phase::PendingStart && session_->trigger_released;
   const bool raw_prev = session_ ? session_->raw_prev
                                  : vinput::scene::Resolve(scene_config_, active_scene_id_).raw_prev;
@@ -576,18 +576,21 @@ void VinputEngine::enterRecordingState(fcitx::InputContext* ic, const fcitx::Key
   session_->trigger = trigger;
   session_->command_mode = command_mode;
   session_->raw_prev = raw_prev;
+  const auto action = session_->capture_action;
+  if (action == Session::CaptureAction::Confirm) {
+    session_->capture_action = Session::CaptureAction::Continue;
+  }
   status_ic_ = ic;
   updateVoicePresentation(
       ic, ComposeLivePreedit(session_->transcript_text,
                              command_mode ? CommandingPreeditText() : RecordingPreeditText(),
                              max_streaming_display_width_));
   ensureStatusSync();
-  if (session_->capture_action == Session::CaptureAction::Confirm) {
-    session_->capture_action = Session::CaptureAction::Continue;
+  if (action == Session::CaptureAction::Confirm) {
     finishStopRecording();
     return;
   }
-  if (stop_after_start && session_->capture_action != Session::CaptureAction::Discard) {
+  if (stop_after_start && action != Session::CaptureAction::Discard) {
     scheduleStopRecording();
   }
 }

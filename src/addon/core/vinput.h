@@ -121,6 +121,7 @@ private:
   void callCancelOperation(bool commit_raw_text);
   void discardRecording();
   void publishRecordingGesture();
+  void syncRecordingState(fcitx::InputContext* ic, bool command_mode);
   bool callReloadAsrBackend(std::string* error = nullptr);
   bool callStartClient(const std::string& client_id, std::string* error = nullptr);
   bool callStopClient(const std::string& client_id, std::string* error = nullptr);
@@ -198,7 +199,7 @@ private:
     fcitx::InputContext* ic = nullptr;
     fcitx::Key trigger;
     std::chrono::steady_clock::time_point press_time;
-    const char* recording_gesture = nullptr;
+    std::string recording_gesture;
     bool command_mode = false;
     bool trigger_released = false;
     bool raw_prev = true;
@@ -280,6 +281,7 @@ private:
   mutable std::string last_known_daemon_status_;
   std::optional<std::chrono::steady_clock::time_point> polled_idle_since_;
   std::optional<fcitx::Key> pending_voice_control_release_;
+  bool passed_escape_press_ = false;
   vinput::dbus::AsrBackendState cached_asr_backend_state_;
   bool has_cached_asr_backend_state_ = false;
   std::atomic<uint64_t> asr_state_refresh_seq_{0};

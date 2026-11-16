@@ -556,8 +556,15 @@ bool VinputEngine::passThroughVoiceEscape(const fcitx::KeyEvent& keyEvent,
                                           const HotkeyMatch& hotkey_match) {
   // Leave both edges to the application. In particular, Alt+Escape during a
   // hold must not enter the generic chord-interruption path below.
-  if (hotkey_match.role == HotkeyRole::None && keyEvent.origKey().sym() == FcitxKey_Escape &&
-      (session_ || isPendingStart() || first_tap_release_)) {
+  if (hotkey_match.role != HotkeyRole::None || keyEvent.origKey().sym() != FcitxKey_Escape) {
+    return false;
+  }
+  if (keyEvent.isRelease() && passed_escape_press_) {
+    passed_escape_press_ = false;
+    return true;
+  }
+  if (session_ || isPendingStart() || first_tap_release_) {
+    passed_escape_press_ = !keyEvent.isRelease();
     if (held_role_ == HotkeyRole::None && first_tap_release_) {
       cancelPendingStart();
     }

@@ -45,7 +45,13 @@ constexpr auto kPolledIdleRecoveryDelay =
 std::string StartingPreeditText() {
   return _("... Starting ...");
 }
-std::string RecordingPreeditText() {
+std::string RecordingPreeditText(std::string_view gesture) {
+  if (gesture == kHoldGesture) {
+    return _("Hold to talk - release to insert");
+  }
+  if (gesture == kDoubleTapGesture) {
+    return _("Hands-free - double-tap to insert");
+  }
   return _("... Recording ...");
 }
 
@@ -486,12 +492,12 @@ void VinputEngine::discardRecording() {
 
 void VinputEngine::publishRecordingGesture() {
   if (!capsule_available_ || !bus_ || !session_ || session_->phase != Session::Phase::Recording ||
-      !session_->recording_gesture) {
+      session_->recording_gesture.empty()) {
     return;
   }
   auto message = bus_->createMethodCall(kCapsuleBusName, kCapsulePath, kCapsuleBusName,
                                         kMethodSetRecordingGesture);
-  message << std::string(session_->recording_gesture);
+  message << session_->recording_gesture;
   message.send();
 }
 
@@ -591,7 +597,8 @@ void VinputEngine::enterRecordingState(fcitx::InputContext* ic, const fcitx::Key
   status_ic_ = ic;
   updateVoicePresentation(
       ic, ComposeLivePreedit(session_->transcript_text,
-                             command_mode ? CommandingPreeditText() : RecordingPreeditText(),
+                             command_mode ? CommandingPreeditText()
+                                          : RecordingPreeditText(session_->recording_gesture),
                              max_streaming_display_width_));
   ensureStatusSync();
   if (action == Session::CaptureAction::Confirm) {
@@ -816,6 +823,15 @@ bool VinputEngine::resolveSessionRawPrev() const {
   return vinput::scene::Resolve(scene_config_, active_scene_id_).raw_prev;
 }
 
+void VinputEngine::syncRecordingState(fcitx::InputContext* ic, bool command_mode) {
+  const auto trigger = session_ ? session_->trigger : fcitx::Key();
+  const bool starting = session_ && session_->phase == Session::Phase::PendingStart;
+  enterRecordingState(ic, trigger, command_mode);
+  if (starting) {
+    publishRecordingGesture();
+  }
+}
+
 void VinputEngine::applyDaemonStatusLocally(const std::string& status,
                                             fcitx::InputContext* fallback_ic,
                                             bool prefer_command_mode) {
@@ -840,8 +856,7 @@ void VinputEngine::applyDaemonStatusLocally(const std::string& status,
   const bool command_mode = session_ ? session_->command_mode : prefer_command_mode;
 
   if (status == kStatusRecording) {
-    const auto trigger = session_ ? session_->trigger : fcitx::Key();
-    enterRecordingState(ic, trigger, command_mode);
+    syncRecordingState(ic, command_mode);
     return;
   }
 
@@ -948,10 +963,11 @@ void VinputEngine::handleRecognitionPartial(const std::string& transcript_text) 
     return;
   }
 
-  updateVoicePresentation(ic, ComposeLivePreedit(transcript_text,
-                                                 session.command_mode ? CommandingPreeditText()
-                                                                      : RecordingPreeditText(),
-                                                 max_streaming_display_width_));
+  updateVoicePresentation(
+      ic, ComposeLivePreedit(transcript_text,
+                             session.command_mode ? CommandingPreeditText()
+                                                  : RecordingPreeditText(session.recording_gesture),
+                             max_streaming_display_width_));
 }
 
 void VinputEngine::onStatusChanged(fcitx::dbus::Message& msg) {
@@ -967,9 +983,6 @@ void VinputEngine::onStatusChanged(fcitx::dbus::Message& msg) {
     rememberInputContext(ic);
   }
   applyDaemonStatusLocally(status);
-  if (status == kStatusRecording) {
-    publishRecordingGesture();
-  }
 }
 
 void VinputEngine::sendNotification(const std::string& message, const char* icon, int timeout_ms) {

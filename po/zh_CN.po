@@ -1213,6 +1213,12 @@ msgstr "... 正在启动 ..."
 msgid "... Recording ..."
 msgstr "... 正在录音 ..."
 
+msgid "Hold to talk - release to insert"
+msgstr "按住听写 · 松手输入"
+
+msgid "Hands-free - double-tap to insert"
+msgstr "免按住听写 · 再双击输入"
+
 #: src/addon/dbus/vinput_dbus.cpp:40
 msgid "... Commanding ..."
 msgstr "... 正在命令 ..."

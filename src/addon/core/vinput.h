@@ -120,6 +120,7 @@ private:
   bool callStopRecording(const std::string& scene_id);
   void callCancelOperation(bool commit_raw_text);
   void discardRecording();
+  void publishRecordingGesture();
   bool callReloadAsrBackend(std::string* error = nullptr);
   bool callStartClient(const std::string& client_id, std::string* error = nullptr);
   bool callStopClient(const std::string& client_id, std::string* error = nullptr);
@@ -197,6 +198,7 @@ private:
     fcitx::InputContext* ic = nullptr;
     fcitx::Key trigger;
     std::chrono::steady_clock::time_point press_time;
+    const char* recording_gesture = nullptr;
     bool command_mode = false;
     bool trigger_released = false;
     bool raw_prev = true;
@@ -223,8 +225,8 @@ private:
   bool chord_interrupted_ = false;
   std::chrono::steady_clock::time_point held_press_time_;
 
+  bool passThroughVoiceEscape(const fcitx::KeyEvent& keyEvent, const HotkeyMatch& hotkey_match);
   bool handleDictationGestureKey(fcitx::KeyEvent& event, const HotkeyMatch& match);
-  [[nodiscard]] bool handlePostprocessingKeyEvent(fcitx::KeyEvent& keyEvent);
   [[nodiscard]] bool handleVoiceControlKeyEvent(fcitx::KeyEvent& keyEvent);
   [[nodiscard]] bool handleMenuNavigationKeyEvent(fcitx::KeyEvent& keyEvent);
   [[nodiscard]] HotkeyMatch classifyHotkey(const fcitx::Key& event_key, bool is_release) const;

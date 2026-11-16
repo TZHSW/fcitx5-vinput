@@ -220,41 +220,21 @@ bool VinputEngine::handleVoiceControlKeyEvent(fcitx::KeyEvent& keyEvent) {
     keyEvent.filterAndAccept();
     return true;
   }
-  if (!session_) {
-    return false;
-  }
-  const bool discard = keyEvent.key().check(FcitxKey_Escape) ||
-                       (trigger_mode_ == TriggerMode::HoldDoubleTap && isHoldRecording() &&
-                        keyEvent.origKey().sym() == FcitxKey_Escape);
-  if (discard && !keyEvent.isRelease() &&
-      (session_->phase == Session::Phase::PendingStart ||
-       session_->phase == Session::Phase::Recording)) {
-    pending_voice_control_release_ = keyEvent.key();
-    discardRecording();
-    keyEvent.filterAndAccept();
-    return true;
-  }
-  return handlePostprocessingKeyEvent(keyEvent);
-}
-
-bool VinputEngine::handlePostprocessingKeyEvent(fcitx::KeyEvent& keyEvent) {
-  const bool discard = keyEvent.key().check(FcitxKey_Escape);
   if (!session_ || session_->phase != Session::Phase::Postprocessing ||
       last_known_daemon_status_ != vinput::dbus::kStatusPostprocessing) {
     return false;
   }
-
   const bool commit_raw =
       (session_->raw_prev && !session_->command_mode) &&
       (keyEvent.key().check(FcitxKey_Return) || keyEvent.key().check(FcitxKey_KP_Enter));
 
-  if (!discard && !commit_raw) {
+  if (!commit_raw) {
     return false;
   }
 
   if (!keyEvent.isRelease()) {
     pending_voice_control_release_ = keyEvent.key();
-    callCancelOperation(commit_raw);
+    callCancelOperation(true);
   }
   keyEvent.filterAndAccept();
   return true;
@@ -399,6 +379,7 @@ void VinputEngine::startHeldDictation() {
   startVoiceRecording(ic, pending_start_trigger_, false);
   if (session_ && session_->phase == Session::Phase::PendingStart) {
     session_->stop_on_release = true;
+    session_->recording_gesture = vinput::dbus::kHoldGesture;
   }
 }
 
@@ -407,6 +388,9 @@ void VinputEngine::toggleDictationGesture(fcitx::InputContext* ic, const fcitx::
     if (last_known_daemon_status_ != vinput::dbus::kStatusRecording) {
       handleTapReleaseMode(ic, {.role = HotkeyRole::Trigger, .matched_key = key},
                            std::chrono::steady_clock::now());
+      if (session_ && session_->phase == Session::Phase::PendingStart) {
+        session_->recording_gesture = vinput::dbus::kDoubleTapGesture;
+      }
     }
     return;
   }
@@ -568,6 +552,20 @@ void VinputEngine::handleHotkeyUp(fcitx::KeyEvent& keyEvent, fcitx::InputContext
   keyEvent.filterAndAccept();
 }
 
+bool VinputEngine::passThroughVoiceEscape(const fcitx::KeyEvent& keyEvent,
+                                          const HotkeyMatch& hotkey_match) {
+  // Leave both edges to the application. In particular, Alt+Escape during a
+  // hold must not enter the generic chord-interruption path below.
+  if (hotkey_match.role == HotkeyRole::None && keyEvent.origKey().sym() == FcitxKey_Escape &&
+      (session_ || isPendingStart() || first_tap_release_)) {
+    if (held_role_ == HotkeyRole::None && first_tap_release_) {
+      cancelPendingStart();
+    }
+    return true;
+  }
+  return false;
+}
+
 void VinputEngine::handleKeyEvent(fcitx::Event& event) {
   auto& keyEvent = dynamic_cast<fcitx::KeyEvent&>(event);
   auto* ic = keyEvent.inputContext();
@@ -578,6 +576,9 @@ void VinputEngine::handleKeyEvent(fcitx::Event& event) {
   if (trigger_mode_ == TriggerMode::HoldDoubleTap &&
       handleDictationGestureKey(keyEvent, hotkey_match)) {
     keyEvent.filterAndAccept();
+    return;
+  }
+  if (passThroughVoiceEscape(keyEvent, hotkey_match)) {
     return;
   }
   if (handleVoiceControlKeyEvent(keyEvent)) {

@@ -33,6 +33,7 @@ public:
   void observe(QDBusConnection bus);
 
   Q_SLOT Q_SCRIPTABLE void discardPreview();
+  Q_SLOT Q_SCRIPTABLE void setRecordingGesture(const QString& gesture);
   Q_SLOT void onStatus(const QString& status);
   Q_SLOT void onPartial(const QString& text);
   Q_SLOT void onResult(const QString& payload);
@@ -46,6 +47,8 @@ protected:
 private:
   void createTray();
   void queryStatus(const QDBusConnection& bus);
+  void showListening();
+  void onIdle();
   void showFailure(const QString& title);
   void present(const QString& title, const QString& hint);
   void refreshText();
@@ -61,6 +64,8 @@ private:
   QPushButton* quit_;
   FocusedScreen* focusedScreen_ = nullptr;
   QTimer hideTimer_;
+  QTimer failureTimer_;
+  QString recordingGesture_;
   QString text_;
   std::optional<vinput::dbus::Status> phase_;
   quint64 revision_ = 0;

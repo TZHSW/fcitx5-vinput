@@ -59,14 +59,10 @@ std::string InferringPreeditText() {
 
 std::string PostprocessingPreeditText(bool command_mode, bool raw_prev = true) {
   if (command_mode) {
-    return _("... Applying command ... (Esc: Cancel)");
+    return _("... Applying command ...");
   }
-  return raw_prev ? _("... Postprocessing ... (Enter: Use raw ASR text, Esc: Cancel)")
-                  : _("... Postprocessing ... (Esc: Cancel)");
-}
-
-std::string ApplyingCommandPreeditText() {
-  return _("... Applying command ... (Esc: Cancel)");
+  return raw_prev ? _("... Postprocessing ... (Enter: Use raw ASR text)")
+                  : _("... Postprocessing ...");
 }
 
 std::string CommandTranscriptPreeditText(const std::string& text) {
@@ -311,6 +307,7 @@ void VinputEngine::setupDBusWatcher() {
           return;
         }
         capsule_available_ = !owner.empty();
+        publishRecordingGesture();
         // Only repaint a live voice session: idle ownership changes must not
         // dismiss the final candidate menu or another input method's panel.
         if (session_ && status_ic_ != nullptr) {
@@ -487,6 +484,17 @@ void VinputEngine::discardRecording() {
   callCancelOperation(false);
 }
 
+void VinputEngine::publishRecordingGesture() {
+  if (!capsule_available_ || !bus_ || !session_ || session_->phase != Session::Phase::Recording ||
+      !session_->recording_gesture) {
+    return;
+  }
+  auto message = bus_->createMethodCall(kCapsuleBusName, kCapsulePath, kCapsuleBusName,
+                                        kMethodSetRecordingGesture);
+  message << std::string(session_->recording_gesture);
+  message.send();
+}
+
 void VinputEngine::ensureStatusSync() {
   const bool needs_sync = session_.has_value() || status_ic_ != nullptr;
   if (!needs_sync) {
@@ -626,8 +634,7 @@ void VinputEngine::enterBusyState(fcitx::InputContext* ic, bool command_mode,
         LimitPreviewText(command_mode ? CommandTranscriptPreeditText(session_->transcript_text)
                                       : session_->transcript_text,
                          max_streaming_display_width_);
-    updateVoicePresentation(ic, command_mode ? ApplyingCommandPreeditText() : preedit_text,
-                            transcript);
+    updateVoicePresentation(ic, preedit_text, transcript);
   } else {
     updateVoicePresentation(ic, ComposeLivePreedit(session_->transcript_text, preedit_text,
                                                    max_streaming_display_width_));
@@ -960,6 +967,9 @@ void VinputEngine::onStatusChanged(fcitx::dbus::Message& msg) {
     rememberInputContext(ic);
   }
   applyDaemonStatusLocally(status);
+  if (status == kStatusRecording) {
+    publishRecordingGesture();
+  }
 }
 
 void VinputEngine::sendNotification(const std::string& message, const char* icon, int timeout_ms) {

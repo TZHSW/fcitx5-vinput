@@ -9,6 +9,9 @@ namespace vinput::dbus {
 constexpr const char* kBusName = "org.fcitx.Vinput";
 constexpr const char* kCapsuleBusName = "org.fcitx.Vinput.Capsule";
 constexpr const char* kCapsulePath = "/org/fcitx/Vinput/Capsule";
+constexpr const char* kMethodSetRecordingGesture = "setRecordingGesture";
+constexpr const char* kHoldGesture = "hold";
+constexpr const char* kDoubleTapGesture = "double-tap";
 constexpr const char* kMethodDiscardPreview = "discardPreview";
 constexpr const char* kObjectPath = "/org/fcitx/Vinput";
 constexpr const char* kInterface = "org.fcitx.Vinput.Service";

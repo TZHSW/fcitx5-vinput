@@ -1222,16 +1222,16 @@ msgid "... Recognizing ..."
 msgstr "... 正在识别 ..."
 
 #: src/addon/dbus/vinput_dbus.cpp:49 src/addon/dbus/vinput_dbus.cpp:56
-msgid "... Applying command ... (Esc: Cancel)"
-msgstr "... 正在应用命令 ...（Esc：取消）"
+msgid "... Applying command ..."
+msgstr "... 正在应用命令 ..."
 
 #: src/addon/dbus/vinput_dbus.cpp:51
-msgid "... Postprocessing ... (Enter: Use raw ASR text, Esc: Cancel)"
-msgstr "... 正在后处理 ...（Enter：使用原始 ASR 文本，Esc：取消）"
+msgid "... Postprocessing ... (Enter: Use raw ASR text)"
+msgstr "... 正在后处理 ...（Enter：使用原始 ASR 文本）"
 
 #: src/addon/dbus/vinput_dbus.cpp:52
-msgid "... Postprocessing ... (Esc: Cancel)"
-msgstr "... 正在后处理 ...（Esc：取消）"
+msgid "... Postprocessing ..."
+msgstr "... 正在后处理 ..."
 
 #: src/addon/dbus/vinput_dbus.cpp:60
 #, c-format

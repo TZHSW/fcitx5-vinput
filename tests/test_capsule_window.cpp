@@ -170,6 +170,37 @@ void TestStateAndFocus() {
          "Legacy error notification preserves text across idle");
 }
 
+void TestGesturesAndFailureDismissal() {
+  vinput::gui::CapsuleWindow failure;
+  vinput::gui::CapsuleWindow unfinished;
+  vinput::gui::CapsuleWindow next;
+  failure.setRecordingGesture("hold");
+  failure.onStatus("recording");
+  Expect(failure.findChild<QLabel*>("capsuleStatus")->text() == "Hold to talk - release to insert",
+         "Early hold information is visible when recording starts");
+  failure.onStatus("error");
+  failure.onStatus("idle");
+  unfinished.onStatus("recording");
+  unfinished.onPartial("unfinished");
+  unfinished.onStatus("idle");
+  next.onStatus("error");
+  next.onStatus("recording");
+  next.setRecordingGesture("double-tap");
+  next.onStatus("recording");
+  Pump(3400);
+  Expect(!failure.isVisible() && !unfinished.isVisible(), "Errors and incomplete results dismiss");
+  unfinished.onStatus("idle");
+  Expect(!unfinished.isVisible(), "Repeated idle must not reopen a dismissed preview");
+  Expect(next.isVisible() && next.findChild<QLabel*>("capsuleStatus")->text() ==
+                                 "Hands-free - double-tap to insert",
+         "New recording outlives the previous failure timer and retains its mode");
+  next.onStatus("inferring");
+  next.onStatus("idle");
+  next.onStatus("recording");
+  Expect(next.findChild<QLabel*>("capsuleStatus")->text() == "Listening",
+         "A new recording does not inherit the previous gesture");
+}
+
 void TestScreenGeometry() {
   const QSize capsule(448, 92);
   const QRect right(1920, 0, 1920, 1040);
@@ -270,7 +301,7 @@ void TestPrivateBus() {
   Q_EMIT daemon.StatusChanged("idle");
   Pump();
   Expect(!window.findChild<QPushButton*>("capsuleCopy")->isEnabled(),
-         "Esc clears the discarded hypothesis even when the daemon only emits idle");
+         "Explicit discard clears the hypothesis even when the daemon only emits idle");
 }
 
 void RenderPreviews() {
@@ -308,6 +339,7 @@ int main(int argc, char* argv[]) {
   } else {
     TestScreenGeometry();
     TestStateAndFocus();
+    TestGesturesAndFailureDismissal();
   }
   std::cout << "Capsule tests passed.\n";
   return 0;

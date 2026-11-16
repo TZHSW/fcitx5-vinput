@@ -1622,6 +1622,18 @@ Found %2 model(s).</source>
         <translation>语音输入服务已断开</translation>
     </message>
     <message>
+        <source>Hold to talk - release to insert</source>
+        <translation>按住听写 · 松手输入</translation>
+    </message>
+    <message>
+        <source>Hands-free - double-tap to insert</source>
+        <translation>免按住听写 · 再双击输入</translation>
+    </message>
+    <message>
+        <source>No recognition result</source>
+        <translation>没有识别到文字</translation>
+    </message>
+    <message>
         <source>Listening</source>
         <translation>正在录音</translation>
     </message>

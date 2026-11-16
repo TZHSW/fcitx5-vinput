@@ -106,6 +106,9 @@ CapsuleWindow::CapsuleWindow(QWidget* parent)
       hide();
     }
   });
+  failureTimer_.setSingleShot(true);
+  failureTimer_.setInterval(3000);
+  connect(&failureTimer_, &QTimer::timeout, this, &QWidget::hide);
   createTray();
   for (auto* screen : QGuiApplication::screens()) {
     watchScreen(screen);
@@ -209,6 +212,29 @@ void CapsuleWindow::queryStatus(const QDBusConnection& bus) {
           });
 }
 
+void CapsuleWindow::setRecordingGesture(const QString& gesture) {
+  if (gesture != vinput::dbus::kHoldGesture && gesture != vinput::dbus::kDoubleTapGesture) {
+    return;
+  }
+  if (phase_.has_value() && phase_ != vinput::dbus::Status::Recording) {
+    return;
+  }
+  recordingGesture_ = gesture;
+  if (phase_ == vinput::dbus::Status::Recording) {
+    showListening();
+  }
+}
+
+void CapsuleWindow::showListening() {
+  if (recordingGesture_ == vinput::dbus::kHoldGesture) {
+    present(tr("Hold to talk - release to insert"), {});
+  } else if (recordingGesture_ == vinput::dbus::kDoubleTapGesture) {
+    present(tr("Hands-free - double-tap to insert"), {});
+  } else {
+    present(tr("Listening"), tr("Use your voice-input shortcut to finish."));
+  }
+}
+
 void CapsuleWindow::onStatus(const QString& status) {
   using namespace vinput::dbus;
   const std::string value = status.toStdString();
@@ -219,6 +245,9 @@ void CapsuleWindow::onStatus(const QString& status) {
   }
   ++revision_;
   const Status next = StringToStatus(value);
+  if (next != Status::Recording) {
+    recordingGesture_.clear();
+  }
   switch (next) {
   case Status::Recording:
     if (phase_.has_value() && phase_ != Status::Recording) {
@@ -226,7 +255,7 @@ void CapsuleWindow::onStatus(const QString& status) {
       resultReceived_ = false;
     }
     phase_ = next;
-    present(tr("Listening"), tr("Use your voice-input shortcut to finish."));
+    showListening();
     return;
   case Status::Inferring:
     phase_ = next;
@@ -240,27 +269,35 @@ void CapsuleWindow::onStatus(const QString& status) {
     showFailure(tr("Recognition failed"));
     return;
   case Status::Idle:
-    if (phase_ == Status::Error) {
-      return; // Preserve failed text until the next recording or explicit exit.
-    }
-    phase_ = next;
-    if (resultReceived_) {
-      hideTimer_.start();
-      return;
-    }
-    if (!text_.isEmpty()) {
-      // Current daemons use idle for both cancellation and some failures.
-      // Preserve the hypothesis without claiming a result or a specific cause.
-      present(tr("Session ended"), tr("No final result. You can copy the preview text."));
-      return;
-    }
-    if (!QSystemTrayIcon::isSystemTrayAvailable()) {
-      present(tr("Ready"), tr("Use your voice-input shortcut to start recording."));
-      return;
-    }
-    hide();
+    onIdle();
     return;
   }
+}
+
+void CapsuleWindow::onIdle() {
+  using vinput::dbus::Status;
+  if (phase_ == Status::Error || (phase_ == Status::Idle && !text_.isEmpty() && !resultReceived_)) {
+    return;
+  }
+  if (phase_ && phase_ != Status::Idle && text_.isEmpty() && !resultReceived_) {
+    showFailure(tr("No recognition result"));
+    return;
+  }
+  phase_ = Status::Idle;
+  if (resultReceived_) {
+    hideTimer_.start();
+    return;
+  }
+  if (!text_.isEmpty()) {
+    present(tr("Session ended"), tr("No final result. You can copy the preview text."));
+    failureTimer_.start();
+    return;
+  }
+  if (!QSystemTrayIcon::isSystemTrayAvailable()) {
+    present(tr("Ready"), tr("Use your voice-input shortcut to start recording."));
+    return;
+  }
+  hide();
 }
 
 void CapsuleWindow::onPartial(const QString& text) {
@@ -298,6 +335,9 @@ void CapsuleWindow::onResult(const QString& payload) {
     return;
   }
   ++revision_;
+  if (phase_ == vinput::dbus::Status::Error) {
+    phase_ = vinput::dbus::Status::Idle;
+  }
   resultReceived_ = true;
   text_ = QString::fromStdString(result.commitText);
   present(tr("Recognition result"),
@@ -316,12 +356,18 @@ void CapsuleWindow::onNotification(const QString& /*code*/, const QString& /*sub
 }
 
 void CapsuleWindow::showFailure(const QString& title) {
+  if (phase_ == vinput::dbus::Status::Error && title_->text() == title) {
+    return;
+  }
+  recordingGesture_.clear();
   phase_ = vinput::dbus::Status::Error;
   present(title, tr("Preview text is kept for copying. See the system notification for details."));
+  failureTimer_.start();
 }
 
 void CapsuleWindow::present(const QString& title, const QString& hint) {
   hideTimer_.stop();
+  failureTimer_.stop();
   title_->setText(title);
   indicator_->setStyleSheet(phase_ == vinput::dbus::Status::Error
                                 ? "color:#efb87b;font-size:10px;"

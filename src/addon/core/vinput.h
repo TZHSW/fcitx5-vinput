@@ -108,6 +108,10 @@ private:
   bool isPendingStartTrigger(const fcitx::Key& trigger) const;
   void cancelPendingStop();
   void cancelPendingStart();
+  void beginDictationGesture(fcitx::InputContext* ic, const fcitx::Key& key);
+  void releaseDictationGesture(fcitx::InputContext* ic, const fcitx::Key& key);
+  void toggleDictationGesture(fcitx::InputContext* ic, const fcitx::Key& key);
+  void startHeldDictation();
   void scheduleStopRecording();
   void finishStopRecording();
   void setupDBusWatcher();
@@ -279,6 +283,7 @@ private:
   std::shared_ptr<bool> lifetime_token_ = std::make_shared<bool>(true);
   std::unique_ptr<fcitx::EventSourceTime> pending_stop_event_;
   std::unique_ptr<fcitx::EventSourceTime> pending_start_event_;
+  std::optional<std::chrono::steady_clock::time_point> first_tap_release_;
   fcitx::Key pending_start_trigger_;
   fcitx::TrackableObjectReference<fcitx::InputContext> pending_start_ic_;
   std::unique_ptr<fcitx::EventSourceTime> status_sync_event_;

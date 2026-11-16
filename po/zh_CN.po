@@ -1202,6 +1202,9 @@ msgstr "长按"
 msgid "Both"
 msgstr "均可"
 
+msgid "Hold to talk, double-tap to toggle"
+msgstr "长按说话，双击切换免按住听写"
+
 #: src/addon/dbus/vinput_dbus.cpp:33
 msgid "... Starting ..."
 msgstr "... 正在启动 ..."

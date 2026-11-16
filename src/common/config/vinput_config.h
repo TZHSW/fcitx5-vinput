@@ -8,8 +8,9 @@
 
 inline constexpr const char* kVinputConfigPath = "conf/vinput.conf";
 
-FCITX_CONFIG_ENUM(TriggerMode, Tap, Hold, Both)
-FCITX_CONFIG_ENUM_I18N_ANNOTATION(TriggerMode, N_("Tap"), N_("Hold"), N_("Both"))
+FCITX_CONFIG_ENUM(TriggerMode, Tap, Hold, Both, HoldDoubleTap)
+FCITX_CONFIG_ENUM_I18N_ANNOTATION(TriggerMode, N_("Tap"), N_("Hold"), N_("Both"),
+                                  N_("Hold to talk, double-tap to toggle"))
 
 class VinputConfig : public fcitx::Configuration {
 public:

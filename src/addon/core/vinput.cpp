@@ -217,9 +217,11 @@ void VinputEngine::onInputContextFocusOut(fcitx::InputContext* ic) {
     cancelPendingStart();
     chord_interrupted_ = true;
   }
-  held_key_sym_.reset();
-  held_role_ = HotkeyRole::None;
-  chord_interrupted_ = true;
+  if (pending_start_ic_.get() == nullptr) {
+    held_key_sym_.reset();
+    held_role_ = HotkeyRole::None;
+    chord_interrupted_ = true;
+  }
   if (session_ && session_->ic == ic) {
     if (session_->stop_on_release) {
       callCancelOperation(false);
@@ -329,6 +331,13 @@ void VinputEngine::setConfig(const fcitx::RawConfig& rawConfig) {
 }
 
 void VinputEngine::applySettings() {
+  if (pending_start_ic_.get() != nullptr) {
+    if (isHoldRecording()) {
+      discardRecording();
+    } else {
+      cancelPendingStart();
+    }
+  }
   trigger_keys_ = config_.triggerKeys.value();
   command_keys_ = config_.commandKeys.value();
   menu_keys_ = config_.menuKeys.value();

@@ -187,7 +187,9 @@ private:
     Session() = default;
 
     enum class Phase : std::uint8_t { PendingStart, Recording, Inferring, Postprocessing };
+    enum class CaptureAction : std::uint8_t { Continue, Confirm, Discard };
     Phase phase = Phase::PendingStart;
+    CaptureAction capture_action = CaptureAction::Continue;
     fcitx::InputContext* ic = nullptr;
     fcitx::Key trigger;
     std::chrono::steady_clock::time_point press_time;

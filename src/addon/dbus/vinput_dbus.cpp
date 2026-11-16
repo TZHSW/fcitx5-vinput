@@ -477,15 +477,14 @@ void VinputEngine::callCancelOperation(bool commit_raw_text) {
 }
 
 void VinputEngine::discardRecording() {
+  if (session_->capture_action == Session::CaptureAction::Discard) {
+    return;
+  }
   cancelPendingStart();
   cancelPendingStop();
+  session_->capture_action = Session::CaptureAction::Discard;
   session_->stop_on_release = false;
   callCancelOperation(false);
-  if (capsule_available_ && bus_ != nullptr) {
-    auto message = bus_->createMethodCall(kCapsuleBusName, kCapsulePath, kCapsuleBusName,
-                                          kMethodDiscardPreview);
-    message.send();
-  }
 }
 
 void VinputEngine::ensureStatusSync() {
@@ -579,11 +578,16 @@ void VinputEngine::enterRecordingState(fcitx::InputContext* ic, const fcitx::Key
   session_->raw_prev = raw_prev;
   status_ic_ = ic;
   updateVoicePresentation(
-      ic, ComposeLivePreedit(session_ ? session_->transcript_text : std::string{},
+      ic, ComposeLivePreedit(session_->transcript_text,
                              command_mode ? CommandingPreeditText() : RecordingPreeditText(),
                              max_streaming_display_width_));
   ensureStatusSync();
-  if (stop_after_start) {
+  if (session_->capture_action == Session::CaptureAction::Confirm) {
+    session_->capture_action = Session::CaptureAction::Continue;
+    finishStopRecording();
+    return;
+  }
+  if (stop_after_start && session_->capture_action != Session::CaptureAction::Discard) {
     scheduleStopRecording();
   }
 }
@@ -805,6 +809,15 @@ bool VinputEngine::resolveSessionRawPrev() const {
 void VinputEngine::applyDaemonStatusLocally(const std::string& status,
                                             fcitx::InputContext* fallback_ic,
                                             bool prefer_command_mode) {
+  if (status == kStatusIdle && session_ &&
+      session_->capture_action == Session::CaptureAction::Discard && capsule_available_ &&
+      bus_ != nullptr) {
+    // The daemon sends idle after its last recording update. Clear the discarded
+    // preview here so a delayed recording signal cannot bring it back.
+    auto message = bus_->createMethodCall(kCapsuleBusName, kCapsulePath, kCapsuleBusName,
+                                          kMethodDiscardPreview);
+    message.send();
+  }
   if (status == kStatusIdle && !session_.has_value() && status_ic_ == nullptr) {
     return;
   }

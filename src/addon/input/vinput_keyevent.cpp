@@ -314,6 +314,9 @@ bool VinputEngine::handleActiveSessionHotkeyDown(const fcitx::Key& matched_key) 
     return false;
   }
 
+  if (session_->capture_action != Session::CaptureAction::Continue) {
+    return true;
+  }
   if (session_->trigger != matched_key) {
     auto* target_ic = session_->ic;
     callCancelOperation(false);
@@ -324,15 +327,7 @@ bool VinputEngine::handleActiveSessionHotkeyDown(const fcitx::Key& matched_key) 
 
   if (session_->trigger_released) {
     if (session_->phase == Session::Phase::PendingStart) {
-      if (trigger_mode_ == TriggerMode::Tap) {
-        // The second tap confirms even if the daemon is still starting capture.
-        session_->stop_on_release = true;
-        return true;
-      }
-      auto* target_ic = session_->ic;
-      callCancelOperation(false);
-      finishFrontendSession(target_ic);
-      clearVoicePresentation(target_ic);
+      session_->capture_action = Session::CaptureAction::Confirm;
     } else {
       finishStopRecording();
     }

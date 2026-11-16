@@ -380,8 +380,10 @@ void VinputEngine::beginDictationGesture(fcitx::InputContext* ic, const fcitx::K
   const auto deadline =
       fcitx::now(kDefaultClock) +
       std::chrono::duration_cast<std::chrono::microseconds>(kTapMaxHoldDuration).count();
-  pending_start_event_ =
-      instance_->eventLoop().addTimeEvent(kDefaultClock, deadline, 0, [this](auto*, uint64_t) {
+  // A zero accuracy lets the system event loop coalesce timers past key release.
+  constexpr uint64_t kHoldAccuracyUsec = 1000;
+  pending_start_event_ = instance_->eventLoop().addTimeEvent(
+      kDefaultClock, deadline, kHoldAccuracyUsec, [this](auto*, uint64_t) {
         startHeldDictation();
         return false;
       });

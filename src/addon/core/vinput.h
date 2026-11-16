@@ -223,6 +223,7 @@ private:
   bool chord_interrupted_ = false;
   std::chrono::steady_clock::time_point held_press_time_;
 
+  bool handleDictationGestureKey(fcitx::KeyEvent& event, const HotkeyMatch& match);
   [[nodiscard]] bool handlePostprocessingKeyEvent(fcitx::KeyEvent& keyEvent);
   [[nodiscard]] bool handleVoiceControlKeyEvent(fcitx::KeyEvent& keyEvent);
   [[nodiscard]] bool handleMenuNavigationKeyEvent(fcitx::KeyEvent& keyEvent);

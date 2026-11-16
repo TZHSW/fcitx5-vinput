@@ -338,13 +338,35 @@ bool VinputEngine::handleActiveSessionHotkeyDown(const fcitx::Key& matched_key) 
   return true;
 }
 
+bool VinputEngine::handleDictationGestureKey(fcitx::KeyEvent& event, const HotkeyMatch& match) {
+  auto* ic = event.inputContext();
+  if (held_role_ == HotkeyRole::Trigger && pending_start_ic_.get() == ic) {
+    // The physical trigger still owns its release after modifier state changes.
+    if (event.isRelease() && held_key_sym_ == event.origKey().sym()) {
+      const auto trigger = pending_start_trigger_;
+      releaseDictationGesture(ic, trigger);
+      return true;
+    }
+    if (match.role == HotkeyRole::Trigger) {
+      return true; // Ignore repeats and overlapping triggers until our release.
+    }
+    if (event.isRelease() && event.origKey().isModifier() && !isHoldRecording()) {
+      cancelPendingStart();
+    }
+  }
+  if (match.role != HotkeyRole::Trigger) {
+    return false;
+  }
+  if (!event.isRelease() && !event.origKey().states().test(fcitx::KeyState::Repeat)) {
+    beginDictationGesture(ic, match.matched_key);
+    held_key_sym_ = event.origKey().sym();
+  }
+  return true;
+}
+
 // A short first tap only arms the pair. The timer is the only path that starts
 // hold-to-talk, so releasing a single tap never opens the microphone.
 void VinputEngine::beginDictationGesture(fcitx::InputContext* ic, const fcitx::Key& key) {
-  if (held_role_ == HotkeyRole::Trigger && pending_start_trigger_ == key &&
-      pending_start_ic_.get() == ic) {
-    return; // Ignore repeated key-down while the same key is held.
-  }
   const auto now = std::chrono::steady_clock::now();
   if (pending_start_ic_.get() != ic || pending_start_trigger_ != key ||
       (first_tap_release_ && now - *first_tap_release_ > kDoubleTapGap)) {
@@ -550,12 +572,8 @@ void VinputEngine::handleKeyEvent(fcitx::Event& event) {
 
   const auto event_key = keyEvent.origKey().normalize();
   const auto hotkey_match = classifyHotkey(event_key, keyEvent.isRelease());
-  if (trigger_mode_ == TriggerMode::HoldDoubleTap && hotkey_match.role == HotkeyRole::Trigger) {
-    if (keyEvent.isRelease()) {
-      releaseDictationGesture(ic, hotkey_match.matched_key);
-    } else if (!keyEvent.origKey().states().test(fcitx::KeyState::Repeat)) {
-      beginDictationGesture(ic, hotkey_match.matched_key);
-    }
+  if (trigger_mode_ == TriggerMode::HoldDoubleTap &&
+      handleDictationGestureKey(keyEvent, hotkey_match)) {
     keyEvent.filterAndAccept();
     return;
   }

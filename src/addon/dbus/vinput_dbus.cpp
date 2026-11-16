@@ -476,6 +476,18 @@ void VinputEngine::callCancelOperation(bool commit_raw_text) {
   msg.send();
 }
 
+void VinputEngine::discardRecording() {
+  cancelPendingStart();
+  cancelPendingStop();
+  session_->stop_on_release = false;
+  callCancelOperation(false);
+  if (capsule_available_ && bus_ != nullptr) {
+    auto message = bus_->createMethodCall(kCapsuleBusName, kCapsulePath, kCapsuleBusName,
+                                          kMethodDiscardPreview);
+    message.send();
+  }
+}
+
 void VinputEngine::ensureStatusSync() {
   const bool needs_sync = session_.has_value() || status_ic_ != nullptr;
   if (!needs_sync) {

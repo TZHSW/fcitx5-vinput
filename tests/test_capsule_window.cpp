@@ -263,6 +263,14 @@ void TestPrivateBus() {
   Q_EMIT daemon.RecognitionPartial("服务重连");
   Pump();
   Expect(CopyText(window) == "服务重连", "Subscriptions survive service restart");
+  auto discard =
+      QDBusMessage::createMethodCall(QDBusConnection::sessionBus().baseService(), kCapsulePath,
+                                     kCapsuleBusName, kMethodDiscardPreview);
+  Expect(server.send(discard), "Send explicit recording discard to preview");
+  Q_EMIT daemon.StatusChanged("idle");
+  Pump();
+  Expect(!window.findChild<QPushButton*>("capsuleCopy")->isEnabled(),
+         "Esc clears the discarded hypothesis even when the daemon only emits idle");
 }
 
 void RenderPreviews() {

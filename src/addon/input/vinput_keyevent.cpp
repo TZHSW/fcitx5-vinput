@@ -211,20 +211,35 @@ void VinputEngine::startVoiceRecording(fcitx::InputContext* ic, const fcitx::Key
   dispatchRecordingStart(ic, trigger, is_command, selected_text);
 }
 
-bool VinputEngine::handlePostprocessingKeyEvent(fcitx::KeyEvent& keyEvent) {
-  if (pending_postprocessing_release_ && keyEvent.isRelease() &&
-      keyEvent.key().normalize().sym() == pending_postprocessing_release_->normalize().sym()) {
-    pending_postprocessing_release_.reset();
+bool VinputEngine::handleVoiceControlKeyEvent(fcitx::KeyEvent& keyEvent) {
+  if (pending_voice_control_release_ && keyEvent.isRelease() &&
+      keyEvent.key().normalize().sym() == pending_voice_control_release_->normalize().sym()) {
+    pending_voice_control_release_.reset();
     keyEvent.filterAndAccept();
     return true;
   }
+  if (!session_) {
+    return false;
+  }
+  const bool discard = keyEvent.key().check(FcitxKey_Escape);
+  if (discard && !keyEvent.isRelease() &&
+      (session_->phase == Session::Phase::PendingStart ||
+       session_->phase == Session::Phase::Recording)) {
+    pending_voice_control_release_ = keyEvent.key();
+    discardRecording();
+    keyEvent.filterAndAccept();
+    return true;
+  }
+  return handlePostprocessingKeyEvent(keyEvent);
+}
 
-  if (!session_ || session_->phase != Session::Phase::Postprocessing ||
+bool VinputEngine::handlePostprocessingKeyEvent(fcitx::KeyEvent& keyEvent) {
+  const bool discard = keyEvent.key().check(FcitxKey_Escape);
+  if (session_->phase != Session::Phase::Postprocessing ||
       last_known_daemon_status_ != vinput::dbus::kStatusPostprocessing) {
     return false;
   }
 
-  const bool discard = keyEvent.key().check(FcitxKey_Escape);
   const bool commit_raw =
       (session_->raw_prev && !session_->command_mode) &&
       (keyEvent.key().check(FcitxKey_Return) || keyEvent.key().check(FcitxKey_KP_Enter));
@@ -234,7 +249,7 @@ bool VinputEngine::handlePostprocessingKeyEvent(fcitx::KeyEvent& keyEvent) {
   }
 
   if (!keyEvent.isRelease()) {
-    pending_postprocessing_release_ = keyEvent.key();
+    pending_voice_control_release_ = keyEvent.key();
     callCancelOperation(commit_raw);
   }
   keyEvent.filterAndAccept();
@@ -309,6 +324,11 @@ bool VinputEngine::handleActiveSessionHotkeyDown(const fcitx::Key& matched_key) 
 
   if (session_->trigger_released) {
     if (session_->phase == Session::Phase::PendingStart) {
+      if (trigger_mode_ == TriggerMode::Tap) {
+        // The second tap confirms even if the daemon is still starting capture.
+        session_->stop_on_release = true;
+        return true;
+      }
       auto* target_ic = session_->ic;
       callCancelOperation(false);
       finishFrontendSession(target_ic);
@@ -449,7 +469,7 @@ void VinputEngine::handleKeyEvent(fcitx::Event& event) {
   auto* ic = keyEvent.inputContext();
   rememberInputContext(ic);
 
-  if (handlePostprocessingKeyEvent(keyEvent)) {
+  if (handleVoiceControlKeyEvent(keyEvent)) {
     return;
   }
   if (handleMenuNavigationKeyEvent(keyEvent)) {

@@ -115,6 +115,7 @@ private:
   bool callStartCommandRecording(const std::string& selected_text);
   bool callStopRecording(const std::string& scene_id);
   void callCancelOperation(bool commit_raw_text);
+  void discardRecording();
   bool callReloadAsrBackend(std::string* error = nullptr);
   bool callStartClient(const std::string& client_id, std::string* error = nullptr);
   bool callStopClient(const std::string& client_id, std::string* error = nullptr);
@@ -217,6 +218,7 @@ private:
   std::chrono::steady_clock::time_point held_press_time_;
 
   [[nodiscard]] bool handlePostprocessingKeyEvent(fcitx::KeyEvent& keyEvent);
+  [[nodiscard]] bool handleVoiceControlKeyEvent(fcitx::KeyEvent& keyEvent);
   [[nodiscard]] bool handleMenuNavigationKeyEvent(fcitx::KeyEvent& keyEvent);
   [[nodiscard]] HotkeyMatch classifyHotkey(const fcitx::Key& event_key, bool is_release) const;
   void handleNonHotkeyKeyEvent(fcitx::KeyEvent& keyEvent);
@@ -268,7 +270,7 @@ private:
   mutable std::chrono::steady_clock::time_point daemon_sync_blocked_until_;
   mutable std::string last_known_daemon_status_;
   std::optional<std::chrono::steady_clock::time_point> polled_idle_since_;
-  std::optional<fcitx::Key> pending_postprocessing_release_;
+  std::optional<fcitx::Key> pending_voice_control_release_;
   vinput::dbus::AsrBackendState cached_asr_backend_state_;
   bool has_cached_asr_backend_state_ = false;
   std::atomic<uint64_t> asr_state_refresh_seq_{0};

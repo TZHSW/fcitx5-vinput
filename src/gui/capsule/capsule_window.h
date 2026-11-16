@@ -26,11 +26,13 @@ QRect CapsuleBounds(const QRect& available, const QSize& desired);
 // An observer only: recording and committing remain owned by daemon/addon.
 class CapsuleWindow final : public QWidget {
   Q_OBJECT
+  Q_CLASSINFO("D-Bus Interface", "org.fcitx.Vinput.Capsule")
 
 public:
   explicit CapsuleWindow(QWidget* parent = nullptr);
   void observe(QDBusConnection bus);
 
+  Q_SLOT Q_SCRIPTABLE void discardPreview();
   Q_SLOT void onStatus(const QString& status);
   Q_SLOT void onPartial(const QString& text);
   Q_SLOT void onResult(const QString& payload);

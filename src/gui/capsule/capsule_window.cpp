@@ -152,6 +152,7 @@ void CapsuleWindow::createTray() {
 
 void CapsuleWindow::observe(QDBusConnection bus) {
   using namespace vinput::dbus;
+  bus.registerObject(kCapsulePath, this, QDBusConnection::ExportScriptableSlots);
   focusedScreen_ = new FocusedScreen(bus, this);
   connect(focusedScreen_, &FocusedScreen::outputChanged, this, [this] {
     if (isVisible()) {
@@ -274,19 +275,23 @@ void CapsuleWindow::onPartial(const QString& text) {
   refreshText();
 }
 
+void CapsuleWindow::discardPreview() {
+  ++revision_;
+  hideTimer_.stop();
+  phase_ = vinput::dbus::Status::Idle;
+  resultReceived_ = false;
+  text_.clear();
+  refreshText();
+  onStatus(vinput::dbus::kStatusIdle);
+}
+
 void CapsuleWindow::onResult(const QString& payload) {
   const auto result = vinput::result::Parse(payload.toStdString());
   const bool cancelled = std::ranges::any_of(result.candidates, [](const auto& candidate) {
     return candidate.source == vinput::result::kSourceCancel;
   });
   if (cancelled) {
-    ++revision_;
-    hideTimer_.stop();
-    phase_ = vinput::dbus::Status::Idle;
-    resultReceived_ = false;
-    text_.clear();
-    refreshText();
-    onStatus(vinput::dbus::kStatusIdle);
+    discardPreview();
     return;
   }
   if (result.commitText.empty()) {

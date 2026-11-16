@@ -9,6 +9,7 @@
 #endif
 #include <fcitx-utils/i18n.h>
 #include <fcitx-utils/key.h>
+#include <fcitx-utils/keysym.h>
 #include <fcitx-utils/keysymgen.h>
 #include <fcitx-utils/log.h>
 #include <fcitx-utils/utf8.h>
@@ -33,6 +34,7 @@ namespace {
 
 constexpr auto kDefaultClock = 1; // POSIX CLOCK_MONOTONIC
 constexpr auto kReleaseDebounce = std::chrono::milliseconds(500);
+constexpr auto kDoubleTapGap = std::chrono::milliseconds(350);
 constexpr auto kTriggerDebounce = std::chrono::milliseconds(80);
 
 std::string NoSelectionPreeditText() {
@@ -211,31 +213,28 @@ void VinputEngine::startVoiceRecording(fcitx::InputContext* ic, const fcitx::Key
   dispatchRecordingStart(ic, trigger, is_command, selected_text);
 }
 
-bool VinputEngine::handlePostprocessingKeyEvent(fcitx::KeyEvent& keyEvent) {
-  if (pending_postprocessing_release_ && keyEvent.isRelease() &&
-      keyEvent.key().normalize().sym() == pending_postprocessing_release_->normalize().sym()) {
-    pending_postprocessing_release_.reset();
+bool VinputEngine::handleVoiceControlKeyEvent(fcitx::KeyEvent& keyEvent) {
+  if (pending_voice_control_release_ && keyEvent.isRelease() &&
+      keyEvent.key().normalize().sym() == pending_voice_control_release_->normalize().sym()) {
+    pending_voice_control_release_.reset();
     keyEvent.filterAndAccept();
     return true;
   }
-
   if (!session_ || session_->phase != Session::Phase::Postprocessing ||
       last_known_daemon_status_ != vinput::dbus::kStatusPostprocessing) {
     return false;
   }
-
-  const bool discard = keyEvent.key().check(FcitxKey_Escape);
   const bool commit_raw =
       (session_->raw_prev && !session_->command_mode) &&
       (keyEvent.key().check(FcitxKey_Return) || keyEvent.key().check(FcitxKey_KP_Enter));
 
-  if (!discard && !commit_raw) {
+  if (!commit_raw) {
     return false;
   }
 
   if (!keyEvent.isRelease()) {
-    pending_postprocessing_release_ = keyEvent.key();
-    callCancelOperation(commit_raw);
+    pending_voice_control_release_ = keyEvent.key();
+    callCancelOperation(true);
   }
   keyEvent.filterAndAccept();
   return true;
@@ -299,6 +298,9 @@ bool VinputEngine::handleActiveSessionHotkeyDown(const fcitx::Key& matched_key) 
     return false;
   }
 
+  if (session_->capture_action != Session::CaptureAction::Continue) {
+    return true;
+  }
   if (session_->trigger != matched_key) {
     auto* target_ic = session_->ic;
     callCancelOperation(false);
@@ -309,15 +311,119 @@ bool VinputEngine::handleActiveSessionHotkeyDown(const fcitx::Key& matched_key) 
 
   if (session_->trigger_released) {
     if (session_->phase == Session::Phase::PendingStart) {
-      auto* target_ic = session_->ic;
-      callCancelOperation(false);
-      finishFrontendSession(target_ic);
-      clearVoicePresentation(target_ic);
+      session_->capture_action = Session::CaptureAction::Confirm;
     } else {
       finishStopRecording();
     }
   }
   return true;
+}
+
+bool VinputEngine::handleDictationGestureKey(fcitx::KeyEvent& event, const HotkeyMatch& match) {
+  auto* ic = event.inputContext();
+  if (held_role_ == HotkeyRole::Trigger && pending_start_ic_.get() == ic) {
+    // The physical trigger still owns its release after modifier state changes.
+    if (event.isRelease() && held_key_sym_ == event.origKey().sym()) {
+      const auto trigger = pending_start_trigger_;
+      releaseDictationGesture(ic, trigger);
+      return true;
+    }
+    if (match.role == HotkeyRole::Trigger) {
+      return true; // Ignore repeats and overlapping triggers until our release.
+    }
+    if (event.isRelease() && event.origKey().isModifier() && !isHoldRecording()) {
+      cancelPendingStart();
+    }
+  }
+  if (match.role != HotkeyRole::Trigger) {
+    return false;
+  }
+  if (!event.isRelease() && !event.origKey().states().test(fcitx::KeyState::Repeat)) {
+    beginDictationGesture(ic, match.matched_key);
+    held_key_sym_ = event.origKey().sym();
+  }
+  return true;
+}
+
+// A short first tap only arms the pair. The timer is the only path that starts
+// hold-to-talk, so releasing a single tap never opens the microphone.
+void VinputEngine::beginDictationGesture(fcitx::InputContext* ic, const fcitx::Key& key) {
+  const auto now = std::chrono::steady_clock::now();
+  if (pending_start_ic_.get() != ic || pending_start_trigger_ != key ||
+      (first_tap_release_ && now - *first_tap_release_ > kDoubleTapGap)) {
+    cancelPendingStart();
+  }
+  pending_start_ic_ = ic->watch();
+  pending_start_trigger_ = key;
+  held_role_ = HotkeyRole::Trigger;
+  held_press_time_ = now;
+  const auto deadline =
+      fcitx::now(kDefaultClock) +
+      std::chrono::duration_cast<std::chrono::microseconds>(kTapMaxHoldDuration).count();
+  // A zero accuracy lets the system event loop coalesce timers past key release.
+  constexpr uint64_t kHoldAccuracyUsec = 1000;
+  pending_start_event_ = instance_->eventLoop().addTimeEvent(
+      kDefaultClock, deadline, kHoldAccuracyUsec, [this](auto*, uint64_t) {
+        startHeldDictation();
+        return false;
+      });
+  pending_start_event_->setOneShot();
+}
+
+void VinputEngine::startHeldDictation() {
+  first_tap_release_.reset();
+  auto* ic = pending_start_ic_.get();
+  if (ic == nullptr || session_ || last_known_daemon_status_ == vinput::dbus::kStatusRecording) {
+    return;
+  }
+  startVoiceRecording(ic, pending_start_trigger_, false);
+  if (session_ && session_->phase == Session::Phase::PendingStart) {
+    session_->stop_on_release = true;
+    session_->recording_gesture = vinput::dbus::kHoldGesture;
+  }
+}
+
+void VinputEngine::toggleDictationGesture(fcitx::InputContext* ic, const fcitx::Key& key) {
+  if (!session_) {
+    if (last_known_daemon_status_ != vinput::dbus::kStatusRecording) {
+      handleTapReleaseMode(ic, {.role = HotkeyRole::Trigger, .matched_key = key},
+                           std::chrono::steady_clock::now());
+      if (session_ && session_->phase == Session::Phase::PendingStart) {
+        session_->recording_gesture = vinput::dbus::kDoubleTapGesture;
+      }
+    }
+    return;
+  }
+  if (session_->trigger == key && session_->capture_action == Session::CaptureAction::Continue) {
+    handleActiveSessionHotkeyDown(key);
+  }
+}
+
+void VinputEngine::releaseDictationGesture(fcitx::InputContext* ic, const fcitx::Key& key) {
+  if (held_role_ != HotkeyRole::Trigger || pending_start_trigger_ != key ||
+      pending_start_ic_.get() != ic) {
+    return;
+  }
+  const auto now = std::chrono::steady_clock::now();
+  const bool held =
+      now - held_press_time_ >= kTapMaxHoldDuration || !pending_start_event_->isEnabled();
+  pending_start_event_->setEnabled(false);
+  held_role_ = HotkeyRole::None;
+  if (held) {
+    cancelPendingStart();
+    if (session_ && session_->stop_on_release && session_->trigger == key) {
+      session_->stop_on_release = false;
+      session_->trigger_released = true;
+      handleActiveSessionHotkeyDown(key);
+    }
+    return;
+  }
+  if (!first_tap_release_) {
+    first_tap_release_ = now;
+    return;
+  }
+  cancelPendingStart();
+  toggleDictationGesture(ic, key);
 }
 
 void VinputEngine::handleHotkeyDown(fcitx::KeyEvent& keyEvent, fcitx::InputContext* ic,
@@ -380,7 +486,9 @@ void VinputEngine::handleTapReleaseMode(fcitx::InputContext* ic, const HotkeyMat
 void VinputEngine::handleTriggerReleaseMode(fcitx::InputContext* ic, const HotkeyMatch& match,
                                             std::chrono::steady_clock::duration duration,
                                             std::chrono::steady_clock::time_point now) {
-  const auto action = EvaluateTapHoldTiming(*config_.triggerMode, duration);
+  const auto mode = *config_.triggerMode;
+  const auto action =
+      EvaluateTapHoldTiming(mode == TriggerMode::HoldDoubleTap ? TriggerMode::Tap : mode, duration);
   if (action == TapHoldAction::HoldStop) {
     if (session_ && session_->phase == Session::Phase::Recording) {
       scheduleStopRecording();
@@ -444,20 +552,55 @@ void VinputEngine::handleHotkeyUp(fcitx::KeyEvent& keyEvent, fcitx::InputContext
   keyEvent.filterAndAccept();
 }
 
+bool VinputEngine::passThroughVoiceEscape(const fcitx::KeyEvent& keyEvent,
+                                          const HotkeyMatch& hotkey_match) {
+  // Leave both edges to the application. In particular, Alt+Escape during a
+  // hold must not enter the generic chord-interruption path below.
+  if (hotkey_match.role != HotkeyRole::None || keyEvent.origKey().sym() != FcitxKey_Escape) {
+    return false;
+  }
+  if (keyEvent.isRelease() && passed_escape_press_) {
+    passed_escape_press_ = false;
+    return true;
+  }
+  if (session_ || isPendingStart() || first_tap_release_) {
+    passed_escape_press_ = !keyEvent.isRelease();
+    if (held_role_ == HotkeyRole::None && first_tap_release_) {
+      cancelPendingStart();
+    }
+    return true;
+  }
+  return false;
+}
+
 void VinputEngine::handleKeyEvent(fcitx::Event& event) {
   auto& keyEvent = dynamic_cast<fcitx::KeyEvent&>(event);
   auto* ic = keyEvent.inputContext();
   rememberInputContext(ic);
 
-  if (handlePostprocessingKeyEvent(keyEvent)) {
+  const auto event_key = keyEvent.origKey().normalize();
+  const auto hotkey_match = classifyHotkey(event_key, keyEvent.isRelease());
+  if (trigger_mode_ == TriggerMode::HoldDoubleTap &&
+      handleDictationGestureKey(keyEvent, hotkey_match)) {
+    keyEvent.filterAndAccept();
     return;
+  }
+  if (passThroughVoiceEscape(keyEvent, hotkey_match)) {
+    return;
+  }
+  if (handleVoiceControlKeyEvent(keyEvent)) {
+    return;
+  }
+  if (pending_start_ic_.get() != nullptr && !keyEvent.isRelease()) {
+    if (isHoldRecording()) {
+      discardRecording();
+    } else {
+      cancelPendingStart();
+    }
   }
   if (handleMenuNavigationKeyEvent(keyEvent)) {
     return;
   }
-
-  const auto event_key = keyEvent.origKey().normalize();
-  const auto hotkey_match = classifyHotkey(event_key, keyEvent.isRelease());
 
   if (hotkey_match.role == HotkeyRole::None) {
     handleNonHotkeyKeyEvent(keyEvent);
@@ -498,6 +641,7 @@ void VinputEngine::cancelPendingStop() {
 }
 
 void VinputEngine::cancelPendingStart() {
+  first_tap_release_.reset();
   if (pending_start_event_ && pending_start_event_->isEnabled()) {
     pending_start_event_->setEnabled(false);
   }

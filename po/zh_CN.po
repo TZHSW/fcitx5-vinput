@@ -1202,6 +1202,9 @@ msgstr "长按"
 msgid "Both"
 msgstr "均可"
 
+msgid "HoldDoubleTap"
+msgstr "长按说话，双击切换免按住听写"
+
 #: src/addon/dbus/vinput_dbus.cpp:33
 msgid "... Starting ..."
 msgstr "... 正在启动 ..."
@@ -1209,6 +1212,12 @@ msgstr "... 正在启动 ..."
 #: src/addon/dbus/vinput_dbus.cpp:36
 msgid "... Recording ..."
 msgstr "... 正在录音 ..."
+
+msgid "Hold to talk - release to insert"
+msgstr "按住听写 · 松手输入"
+
+msgid "Hands-free - double-tap to insert"
+msgstr "免按住听写 · 再双击输入"
 
 #: src/addon/dbus/vinput_dbus.cpp:40
 msgid "... Commanding ..."
@@ -1219,16 +1228,16 @@ msgid "... Recognizing ..."
 msgstr "... 正在识别 ..."
 
 #: src/addon/dbus/vinput_dbus.cpp:49 src/addon/dbus/vinput_dbus.cpp:56
-msgid "... Applying command ... (Esc: Cancel)"
-msgstr "... 正在应用命令 ...（Esc：取消）"
+msgid "... Applying command ..."
+msgstr "... 正在应用命令 ..."
 
 #: src/addon/dbus/vinput_dbus.cpp:51
-msgid "... Postprocessing ... (Enter: Use raw ASR text, Esc: Cancel)"
-msgstr "... 正在后处理 ...（Enter：使用原始 ASR 文本，Esc：取消）"
+msgid "... Postprocessing ... (Enter: Use raw ASR text)"
+msgstr "... 正在后处理 ...（Enter：使用原始 ASR 文本）"
 
 #: src/addon/dbus/vinput_dbus.cpp:52
-msgid "... Postprocessing ... (Esc: Cancel)"
-msgstr "... 正在后处理 ...（Esc：取消）"
+msgid "... Postprocessing ..."
+msgstr "... 正在后处理 ..."
 
 #: src/addon/dbus/vinput_dbus.cpp:60
 #, c-format

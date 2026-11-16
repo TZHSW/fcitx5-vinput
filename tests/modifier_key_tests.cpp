@@ -205,6 +205,30 @@ void TestChordInterruptionTapMode(TestInputContext& ic, VinputEngine& engine,
   ic.inputPanel().setPreedit(fcitx::Text());
 }
 
+void TestHoldDoubleTap(TestInputContext& ic, VinputEngine& engine,
+                       const fcitx::RawConfig& base_config) {
+  fcitx::RawConfig config = base_config;
+  config.setValueByPath("TriggerMode", "HoldDoubleTap");
+  engine.setConfig(config);
+  ic.inputPanel().setPreedit(fcitx::Text());
+  const auto tap = [&ic, &engine] {
+    for (const bool release : {false, true}) {
+      fcitx::KeyEvent event(&ic, fcitx::Key(FcitxKey_Alt_R), release);
+      engine.handleKeyEvent(event);
+      expect(event.filtered() && event.accepted(), "Dictation gesture consumes its trigger");
+    }
+  };
+  tap();
+  expect(ic.inputPanel().preedit().toString().empty(), "Single tap must not attempt recording");
+  fcitx::KeyEvent other(&ic, fcitx::Key(FcitxKey_t), false);
+  engine.handleKeyEvent(other);
+  tap();
+  expect(ic.inputPanel().preedit().toString().empty(), "Typing separates two tap gestures");
+  tap();
+  expect(!ic.inputPanel().preedit().toString().empty(), "Two clean taps attempt one recording");
+  engine.setConfig(base_config);
+}
+
 void TestNonTriggerRegularKeys(TestInputContext& ic, VinputEngine& engine) {
   std::cout << "--- 3. Testing Non-Trigger Regular Keys (Alt_L + T) Pass-through ---\n";
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -450,6 +474,7 @@ void runAllTests() {
   VinputEngine engine(&instance);
 
   fcitx::RawConfig test_config;
+  test_config.setValueByPath("TriggerMode", "Both");
   test_config.setValueByPath("TriggerKey/0", "Alt_R");
   test_config.setValueByPath("TriggerKey/1", "F8");
   test_config.setValueByPath("CommandKeys/0", "Control_R");
@@ -460,6 +485,7 @@ void runAllTests() {
   TestSingleModifierTap(ic, engine);
   TestChordInterruption(ic, engine);
   TestChordInterruptionTapMode(ic, engine, test_config);
+  TestHoldDoubleTap(ic, engine, test_config);
   TestNonTriggerRegularKeys(ic, engine);
   TestMultiTriggerIsolation(ic, engine);
   TestMenuKeyTriggerAndCombination(ic, engine);

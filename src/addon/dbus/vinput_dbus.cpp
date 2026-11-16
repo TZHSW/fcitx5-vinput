@@ -6,6 +6,7 @@
 #include <ctime>
 #include <fcitx-utils/dbus/matchrule.h>
 #include <fcitx-utils/dbus/message.h>
+#include <fcitx-utils/dbus/servicewatcher.h>
 #include <fcitx-utils/event.h>
 #include <fcitx-utils/i18n.h>
 #include <fcitx-utils/key.h>
@@ -44,7 +45,13 @@ constexpr auto kPolledIdleRecoveryDelay =
 std::string StartingPreeditText() {
   return _("... Starting ...");
 }
-std::string RecordingPreeditText() {
+std::string RecordingPreeditText(std::string_view gesture) {
+  if (gesture == kHoldGesture) {
+    return _("Hold to talk - release to insert");
+  }
+  if (gesture == kDoubleTapGesture) {
+    return _("Hands-free - double-tap to insert");
+  }
   return _("... Recording ...");
 }
 
@@ -58,14 +65,10 @@ std::string InferringPreeditText() {
 
 std::string PostprocessingPreeditText(bool command_mode, bool raw_prev = true) {
   if (command_mode) {
-    return _("... Applying command ... (Esc: Cancel)");
+    return _("... Applying command ...");
   }
-  return raw_prev ? _("... Postprocessing ... (Enter: Use raw ASR text, Esc: Cancel)")
-                  : _("... Postprocessing ... (Esc: Cancel)");
-}
-
-std::string ApplyingCommandPreeditText() {
-  return _("... Applying command ... (Esc: Cancel)");
+  return raw_prev ? _("... Postprocessing ... (Enter: Use raw ASR text)")
+                  : _("... Postprocessing ...");
 }
 
 std::string CommandTranscriptPreeditText(const std::string& text) {
@@ -302,6 +305,22 @@ void VinputEngine::setupDBusWatcher() {
 
   const std::weak_ptr<bool> token = lifetime_token_;
 
+  capsule_watcher_ = std::make_unique<fcitx::dbus::ServiceWatcher>(*bus_);
+  capsule_watch_entry_ = capsule_watcher_->watchService(
+      kCapsuleBusName,
+      [this, token](const std::string&, const std::string&, const std::string& owner) {
+        if (token.expired()) {
+          return;
+        }
+        capsule_available_ = !owner.empty();
+        publishRecordingGesture();
+        // Only repaint a live voice session: idle ownership changes must not
+        // dismiss the final candidate menu or another input method's panel.
+        if (session_ && status_ic_ != nullptr) {
+          updateVoicePresentation(status_ic_, voice_preedit_text_, voice_aux_text_);
+        }
+      });
+
   const fcitx::dbus::MatchRule result_rule(kBusName, kObjectPath, kInterface,
                                            kSignalRecognitionResult);
 
@@ -460,6 +479,28 @@ void VinputEngine::callCancelOperation(bool commit_raw_text) {
   msg.send();
 }
 
+void VinputEngine::discardRecording() {
+  if (!session_ || session_->capture_action == Session::CaptureAction::Discard) {
+    return;
+  }
+  session_->capture_action = Session::CaptureAction::Discard;
+  session_->stop_on_release = false;
+  cancelPendingStart();
+  cancelPendingStop();
+  callCancelOperation(false);
+}
+
+void VinputEngine::publishRecordingGesture() {
+  if (!capsule_available_ || !bus_ || !session_ || session_->phase != Session::Phase::Recording ||
+      session_->recording_gesture.empty()) {
+    return;
+  }
+  auto message = bus_->createMethodCall(kCapsuleBusName, kCapsulePath, kCapsuleBusName,
+                                        kMethodSetRecordingGesture);
+  message << session_->recording_gesture;
+  message.send();
+}
+
 void VinputEngine::ensureStatusSync() {
   const bool needs_sync = session_.has_value() || status_ic_ != nullptr;
   if (!needs_sync) {
@@ -536,7 +577,7 @@ void VinputEngine::enterRecordingState(fcitx::InputContext* ic, const fcitx::Key
     clearVoicePresentation(status_ic_);
   }
   const bool stop_after_start =
-      (trigger_mode_ == TriggerMode::Hold || (session_ && session_->stop_on_release)) && session_ &&
+      session_ && (trigger_mode_ == TriggerMode::Hold || session_->stop_on_release) &&
       session_->phase == Session::Phase::PendingStart && session_->trigger_released;
   const bool raw_prev = session_ ? session_->raw_prev
                                  : vinput::scene::Resolve(scene_config_, active_scene_id_).raw_prev;
@@ -549,13 +590,22 @@ void VinputEngine::enterRecordingState(fcitx::InputContext* ic, const fcitx::Key
   session_->trigger = trigger;
   session_->command_mode = command_mode;
   session_->raw_prev = raw_prev;
+  const auto action = session_->capture_action;
+  if (action == Session::CaptureAction::Confirm) {
+    session_->capture_action = Session::CaptureAction::Continue;
+  }
   status_ic_ = ic;
   updateVoicePresentation(
-      ic, ComposeLivePreedit(session_ ? session_->transcript_text : std::string{},
-                             command_mode ? CommandingPreeditText() : RecordingPreeditText(),
+      ic, ComposeLivePreedit(session_->transcript_text,
+                             command_mode ? CommandingPreeditText()
+                                          : RecordingPreeditText(session_->recording_gesture),
                              max_streaming_display_width_));
   ensureStatusSync();
-  if (stop_after_start) {
+  if (action == Session::CaptureAction::Confirm) {
+    finishStopRecording();
+    return;
+  }
+  if (stop_after_start && action != Session::CaptureAction::Discard) {
     scheduleStopRecording();
   }
 }
@@ -591,8 +641,7 @@ void VinputEngine::enterBusyState(fcitx::InputContext* ic, bool command_mode,
         LimitPreviewText(command_mode ? CommandTranscriptPreeditText(session_->transcript_text)
                                       : session_->transcript_text,
                          max_streaming_display_width_);
-    updateVoicePresentation(ic, command_mode ? ApplyingCommandPreeditText() : preedit_text,
-                            transcript);
+    updateVoicePresentation(ic, preedit_text, transcript);
   } else {
     updateVoicePresentation(ic, ComposeLivePreedit(session_->transcript_text, preedit_text,
                                                    max_streaming_display_width_));
@@ -774,9 +823,27 @@ bool VinputEngine::resolveSessionRawPrev() const {
   return vinput::scene::Resolve(scene_config_, active_scene_id_).raw_prev;
 }
 
+void VinputEngine::syncRecordingState(fcitx::InputContext* ic, bool command_mode) {
+  const auto trigger = session_ ? session_->trigger : fcitx::Key();
+  const bool starting = session_ && session_->phase == Session::Phase::PendingStart;
+  enterRecordingState(ic, trigger, command_mode);
+  if (starting) {
+    publishRecordingGesture();
+  }
+}
+
 void VinputEngine::applyDaemonStatusLocally(const std::string& status,
                                             fcitx::InputContext* fallback_ic,
                                             bool prefer_command_mode) {
+  if (status == kStatusIdle && session_ &&
+      session_->capture_action == Session::CaptureAction::Discard && capsule_available_ &&
+      bus_ != nullptr) {
+    // The daemon sends idle after its last recording update. Clear the discarded
+    // preview here so a delayed recording signal cannot bring it back.
+    auto message = bus_->createMethodCall(kCapsuleBusName, kCapsulePath, kCapsuleBusName,
+                                          kMethodDiscardPreview);
+    message.send();
+  }
   if (status == kStatusIdle && !session_.has_value() && status_ic_ == nullptr) {
     return;
   }
@@ -789,8 +856,7 @@ void VinputEngine::applyDaemonStatusLocally(const std::string& status,
   const bool command_mode = session_ ? session_->command_mode : prefer_command_mode;
 
   if (status == kStatusRecording) {
-    const auto trigger = session_ ? session_->trigger : fcitx::Key();
-    enterRecordingState(ic, trigger, command_mode);
+    syncRecordingState(ic, command_mode);
     return;
   }
 
@@ -897,10 +963,11 @@ void VinputEngine::handleRecognitionPartial(const std::string& transcript_text) 
     return;
   }
 
-  updateVoicePresentation(ic, ComposeLivePreedit(transcript_text,
-                                                 session.command_mode ? CommandingPreeditText()
-                                                                      : RecordingPreeditText(),
-                                                 max_streaming_display_width_));
+  updateVoicePresentation(
+      ic, ComposeLivePreedit(transcript_text,
+                             session.command_mode ? CommandingPreeditText()
+                                                  : RecordingPreeditText(session.recording_gesture),
+                             max_streaming_display_width_));
 }
 
 void VinputEngine::onStatusChanged(fcitx::dbus::Message& msg) {
@@ -953,10 +1020,15 @@ void VinputEngine::updateVoicePresentation(fcitx::InputContext* ic, const std::s
     return;
   }
   dismissMenusForVoiceActivity();
+  voice_preedit_text_ = preedit_text;
+  voice_aux_text_ = aux_down_text;
+  const bool external_preview = capsule_available_ && session_ && status_ic_ == ic;
   fcitx::Text preedit;
-  preedit.append(preedit_text);
   fcitx::Text aux_down;
-  aux_down.append(aux_down_text);
+  if (!external_preview) {
+    preedit.append(preedit_text);
+    aux_down.append(aux_down_text);
+  }
   ic->inputPanel().setPreedit(preedit);
   ic->inputPanel().setAuxDown(aux_down);
   ic->updatePreedit();

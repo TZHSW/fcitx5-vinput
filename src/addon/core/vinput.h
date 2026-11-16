@@ -9,6 +9,7 @@
 #include <fcitx-config/rawconfig.h>
 #include <fcitx-utils/dbus/bus.h>
 #include <fcitx-utils/dbus/message.h>
+#include <fcitx-utils/dbus/servicewatcher.h>
 #include <fcitx-utils/event.h>
 #include <fcitx-utils/eventdispatcher.h>
 #include <fcitx-utils/handlertable.h>
@@ -107,6 +108,10 @@ private:
   bool isPendingStartTrigger(const fcitx::Key& trigger) const;
   void cancelPendingStop();
   void cancelPendingStart();
+  void beginDictationGesture(fcitx::InputContext* ic, const fcitx::Key& key);
+  void releaseDictationGesture(fcitx::InputContext* ic, const fcitx::Key& key);
+  void toggleDictationGesture(fcitx::InputContext* ic, const fcitx::Key& key);
+  void startHeldDictation();
   void scheduleStopRecording();
   void finishStopRecording();
   void setupDBusWatcher();
@@ -114,6 +119,9 @@ private:
   bool callStartCommandRecording(const std::string& selected_text);
   bool callStopRecording(const std::string& scene_id);
   void callCancelOperation(bool commit_raw_text);
+  void discardRecording();
+  void publishRecordingGesture();
+  void syncRecordingState(fcitx::InputContext* ic, bool command_mode);
   bool callReloadAsrBackend(std::string* error = nullptr);
   bool callStartClient(const std::string& client_id, std::string* error = nullptr);
   bool callStopClient(const std::string& client_id, std::string* error = nullptr);
@@ -169,6 +177,11 @@ private:
   fcitx::EventDispatcher event_dispatcher_;
   std::vector<std::unique_ptr<fcitx::HandlerTableEntry<fcitx::EventHandler>>> eventHandlers_;
   fcitx::dbus::Bus* bus_ = nullptr;
+  std::unique_ptr<fcitx::dbus::ServiceWatcher> capsule_watcher_;
+  std::unique_ptr<fcitx::dbus::ServiceWatcherEntry> capsule_watch_entry_;
+  bool capsule_available_ = false;
+  std::string voice_preedit_text_;
+  std::string voice_aux_text_;
   std::unique_ptr<fcitx::dbus::Slot> result_slot_;
   std::unique_ptr<fcitx::dbus::Slot> partial_slot_;
   std::unique_ptr<fcitx::dbus::Slot> status_slot_;
@@ -180,10 +193,13 @@ private:
     Session() = default;
 
     enum class Phase : std::uint8_t { PendingStart, Recording, Inferring, Postprocessing };
+    enum class CaptureAction : std::uint8_t { Continue, Confirm, Discard };
     Phase phase = Phase::PendingStart;
+    CaptureAction capture_action = CaptureAction::Continue;
     fcitx::InputContext* ic = nullptr;
     fcitx::Key trigger;
     std::chrono::steady_clock::time_point press_time;
+    std::string recording_gesture;
     bool command_mode = false;
     bool trigger_released = false;
     bool raw_prev = true;
@@ -210,7 +226,9 @@ private:
   bool chord_interrupted_ = false;
   std::chrono::steady_clock::time_point held_press_time_;
 
-  [[nodiscard]] bool handlePostprocessingKeyEvent(fcitx::KeyEvent& keyEvent);
+  bool passThroughVoiceEscape(const fcitx::KeyEvent& keyEvent, const HotkeyMatch& hotkey_match);
+  bool handleDictationGestureKey(fcitx::KeyEvent& event, const HotkeyMatch& match);
+  [[nodiscard]] bool handleVoiceControlKeyEvent(fcitx::KeyEvent& keyEvent);
   [[nodiscard]] bool handleMenuNavigationKeyEvent(fcitx::KeyEvent& keyEvent);
   [[nodiscard]] HotkeyMatch classifyHotkey(const fcitx::Key& event_key, bool is_release) const;
   void handleNonHotkeyKeyEvent(fcitx::KeyEvent& keyEvent);
@@ -262,13 +280,15 @@ private:
   mutable std::chrono::steady_clock::time_point daemon_sync_blocked_until_;
   mutable std::string last_known_daemon_status_;
   std::optional<std::chrono::steady_clock::time_point> polled_idle_since_;
-  std::optional<fcitx::Key> pending_postprocessing_release_;
+  std::optional<fcitx::Key> pending_voice_control_release_;
+  bool passed_escape_press_ = false;
   vinput::dbus::AsrBackendState cached_asr_backend_state_;
   bool has_cached_asr_backend_state_ = false;
   std::atomic<uint64_t> asr_state_refresh_seq_{0};
   std::shared_ptr<bool> lifetime_token_ = std::make_shared<bool>(true);
   std::unique_ptr<fcitx::EventSourceTime> pending_stop_event_;
   std::unique_ptr<fcitx::EventSourceTime> pending_start_event_;
+  std::optional<std::chrono::steady_clock::time_point> first_tap_release_;
   fcitx::Key pending_start_trigger_;
   fcitx::TrackableObjectReference<fcitx::InputContext> pending_start_ic_;
   std::unique_ptr<fcitx::EventSourceTime> status_sync_event_;
